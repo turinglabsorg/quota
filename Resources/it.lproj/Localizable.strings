@@ -1,0 +1,94 @@
+/* Usage windows */
+"5-hour session" = "Sessione 5 ore";
+"Weekly" = "Settimana";
+"Weekly · %@" = "Settimana · %@";
+"Monthly" = "Mese";
+"%@ window" = "Finestra %@";
+
+/* Time */
+"now" = "ora";
+"%lldd %lldh" = "%lldg %lldh";
+"%lldd" = "%lldg";
+"%lld d" = "%lld g";
+"%lld min ago" = "%lld min fa";
+"%lld h ago" = "%lld h fa";
+"Resets in %@" = "Reset tra %@";
+"Reset, updating" = "Azzerato, in aggiornamento";
+"Updated %@" = "Aggiornato %@";
+"Data from %@. %@" = "Dati di %@. %@";
+
+/* Accounts */
+"%@ login" = "login %@";
+"linked by Quota" = "collegato da Quota";
+"Linked by Quota" = "Collegato da Quota";
+"Uses the %@ login" = "Usa il login di %@";
+"Current %@ login" = "Login attuale di %@";
+"Active account" = "Account attivo";
+"%@ is already linked." = "%@ è già collegato.";
+
+/* Issues */
+"Too many requests: retrying on the next refresh." = "Troppe richieste: riprovo al prossimo aggiornamento.";
+"Server error (HTTP %lld)." = "Errore del server (HTTP %lld).";
+"Network unreachable." = "Rete non raggiungibile.";
+"Unrecognized response." = "Risposta non riconosciuta.";
+"This account has no subscription limits." = "Questo account non ha limiti di abbonamento.";
+"Not signed in to Claude Code. Run `claude` in a terminal." = "Nessun login a Claude Code. Esegui `claude` nel terminale.";
+"Session expired. Open Claude Code to renew it." = "Sessione scaduta. Apri Claude Code per rinnovarla.";
+"Credentials not found: unlink and relink the account." = "Credenziali non trovate: scollega e ricollega l'account.";
+"Session expired: unlink and relink the account." = "Sessione scaduta: scollega e ricollega l'account.";
+"`codex` CLI not found." = "CLI `codex` non trovata.";
+"This Codex account is not signed in with ChatGPT." = "Nessun login ChatGPT per questo account Codex.";
+"Codex is not signed in with ChatGPT. Run `codex login`." = "Nessun login ChatGPT per Codex. Esegui `codex login`.";
+"Codex uses an API key: no subscription limits." = "Codex usa una API key: nessun limite di abbonamento.";
+"Session expired. Open Codex to renew it." = "Sessione scaduta. Apri Codex per rinnovarla.";
+"Codex session expired: relink the account." = "Sessione Codex scaduta: ricollega l'account.";
+"This Grok account is not signed in." = "Nessun login a Grok per questo account.";
+"Grok session expired: relink the account." = "Sessione Grok scaduta: ricollega l'account.";
+"Grok reports no usage percentage for this account." = "Grok non riporta una percentuale per questo account.";
+
+/* Sign-in */
+"`%@` CLI not found: install it and try again." = "CLI `%@` non trovata: installala e riprova.";
+"Timed out: sign-in was not completed." = "Tempo scaduto: l'accesso non è stato completato.";
+"%@ sign-in was not completed." = "Accesso a %@ non completato.";
+"Codex did not return the linked account." = "Codex non ha restituito l'account collegato.";
+"Claude did not save the account credentials." = "Claude non ha salvato le credenziali dell'account.";
+"Claude did not return the linked account." = "Claude non ha restituito l'account collegato.";
+
+/* Settings */
+"Percentage left" = "Percentuale rimasta";
+"Percentage used" = "Percentuale usata";
+"left" = "rimasto";
+"used" = "usato";
+"Show" = "Mostra";
+"Add account…" = "Aggiungi account…";
+"Launch at login" = "Avvia al login";
+"Quit Quota" = "Esci da Quota";
+"Settings" = "Impostazioni";
+"Couldn't update launch at login: move Quota to the Applications folder and try again." = "Impossibile aggiornare l'avvio al login: sposta Quota nella cartella Applicazioni e riprova.";
+
+/* Popover */
+"Add account" = "Aggiungi account";
+"Refresh now" = "Aggiorna ora";
+"No linked accounts" = "Nessun account collegato";
+"Choose which Claude, Codex and Grok accounts to monitor." = "Scegli tu quali account di Claude, Codex e Grok monitorare.";
+"No accounts" = "Nessun account";
+"Updating…" = "Aggiornamento…";
+"Waiting for data…" = "In attesa dei dati…";
+"Unlink account" = "Scollega account";
+"Loading…" = "Caricamento…";
+"Back" = "Indietro";
+"Sign-in happens in your browser, on the service's official page: Quota never sees your password. Each new account stays separate from your CLI logins." = "L'accesso avviene nel browser, sulla pagina ufficiale del servizio: Quota non vede la tua password. Ogni nuovo account resta separato dal login delle tue CLI.";
+"Linked" = "Collegato";
+"Link" = "Collega";
+"Looking for the %@ login…" = "Cerco il login di %@…";
+"No %@ login on this Mac." = "Nessun login %@ su questo Mac.";
+"Sign in to another account…" = "Accedi con un altro account…";
+"Finish signing in in your browser…" = "Completa l'accesso nel browser…";
+"Open the sign-in page" = "Apri la pagina di accesso";
+"Cancel" = "Annulla";
+"Try again" = "Riprova";
+
+/* Menu bar tooltip */
+"%@: updating" = "%@: in aggiornamento";
+"no data" = "nessun dato";
+"Quota: no linked accounts" = "Quota: nessun account collegato";
