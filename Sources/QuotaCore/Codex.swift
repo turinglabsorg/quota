@@ -20,7 +20,7 @@ public enum CodexParser {
 
     public static func identity(from data: Data) -> AccountIdentity? {
         guard let root = try? JSON.object(data), let account = JSON.dict(root["account"]) else { return nil }
-        return AccountIdentity(email: JSON.string(account["email"]), plan: JSON.string(account["planType"]).map(Formatting.capitalized))
+        return AccountIdentity(email: JSON.string(account["email"]), plan: planLabel(account["planType"]))
     }
 
     public static func rpcUsage(from data: Data) throws -> (plan: String?, windows: [UsageWindow]) {
@@ -32,7 +32,7 @@ public enum CodexParser {
             let minutes = JSON.number(raw["windowDurationMins"]).map { Int($0.rounded()) }
             return UsageWindow(kind: kind(minutes: minutes, fallback: slot.fallback), usedPercent: used, resetsAt: Timestamp.date(raw["resetsAt"]))
         }
-        return (JSON.string(limits["planType"]).map(Formatting.capitalized), sorted(windows))
+        return (planLabel(limits["planType"]), sorted(windows))
     }
 
     public static func usage(from data: Data, now: Date = Date()) throws -> (plan: String?, windows: [UsageWindow]) {
@@ -48,6 +48,11 @@ public enum CodexParser {
             return UsageWindow(kind: kind(minutes: minutes, fallback: slot.fallback), usedPercent: used, resetsAt: resetsAt)
         }
         return (Formatting.capitalized(planType), sorted(windows))
+    }
+
+    private static func planLabel(_ value: Any?) -> String? {
+        guard let plan = JSON.string(value), plan.lowercased() != "unknown" else { return nil }
+        return Formatting.capitalized(plan)
     }
 
     private static func kind(minutes: Int?, fallback: UsageWindow.Kind) -> UsageWindow.Kind {

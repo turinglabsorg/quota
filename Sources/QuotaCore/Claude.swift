@@ -130,15 +130,23 @@ struct ClaudeFetcher {
     }
 
     private func fetchSharedLogin() async throws -> ProviderSnapshot {
-        let stored = await Keychain.read(service: Keychain.claudeService)
-            ?? (try? Data(contentsOf: LocalFiles.home.appending(path: ".claude/.credentials.json")))
-        guard let stored, let credentials = ClaudeParser.credentials(from: stored) else {
+        guard var credentials = await SharedClaudeLogin.read() else {
             throw ProviderIssue.signedOut(String(localized: "Not signed in to Claude Code. Run `claude` in a terminal."))
+        }
+        let expired = ProviderIssue.sessionExpired(String(localized: "The Claude Code session expired and could not be renewed automatically. Run `claude` in a terminal."))
+        if credentials.isExpiring(at: Date()) {
+            guard let renewed = await SharedClaudeLogin.renew(replacing: credentials.accessToken) else { throw expired }
+            credentials = renewed
         }
         do {
             return try await snapshot(credentials)
         } catch ProviderIssue.http(let status) where status == 401 || status == 403 {
-            throw ProviderIssue.sessionExpired(String(localized: "Session expired. Open Claude Code to renew it."))
+            guard let renewed = await SharedClaudeLogin.renew(replacing: credentials.accessToken) else { throw expired }
+            do {
+                return try await snapshot(renewed)
+            } catch ProviderIssue.http(let status) where status == 401 || status == 403 {
+                throw expired
+            }
         }
     }
 
@@ -205,5 +213,58 @@ struct ManagedClaudeCredentials {
         } else {
             await Keychain.write(service: service, data: data)
         }
+    }
+}
+
+// The shared Claude Code login is owned by the CLI: Quota never refreshes it itself, because the
+// refresh token rotates and a running Claude Code would be signed out. Instead it briefly starts
+// `claude`, which renews its own token in the Keychain, and waits for the new token to appear.
+enum SharedClaudeLogin {
+    private static let gate = RenewalGate()
+
+    static func read() async -> ClaudeCredentials? {
+        let stored = await Keychain.read(service: Keychain.claudeService)
+            ?? (try? Data(contentsOf: LocalFiles.home.appending(path: ".claude/.credentials.json")))
+        return stored.flatMap(ClaudeParser.credentials)
+    }
+
+    static func renew(replacing token: String) async -> ClaudeCredentials? {
+        await gate.renew {
+            guard let executable = await CLI.locate(.claude) else { return nil }
+            let session = Task {
+                _ = try? await CommandRunner.run(
+                    URL(filePath: "/usr/bin/script"),
+                    ["-q", "/dev/null", executable.path],
+                    environment: ["CLAUDE_CONFIG_DIR": nil],
+                    timeout: 45,
+                    keepStdinOpen: true
+                )
+            }
+            defer { session.cancel() }
+            for _ in 0..<30 {
+                try? await Task.sleep(for: .seconds(1))
+                if let credentials = await read(), credentials.accessToken != token, !credentials.isExpiring(at: Date()) {
+                    return credentials
+                }
+            }
+            return nil
+        }
+    }
+}
+
+private actor RenewalGate {
+    private static let cooldown: TimeInterval = 10 * 60
+    private var inFlight: Task<ClaudeCredentials?, Never>?
+    private var lastFailure: Date?
+
+    func renew(_ operation: @escaping @Sendable () async -> ClaudeCredentials?) async -> ClaudeCredentials? {
+        if let inFlight { return await inFlight.value }
+        if let lastFailure, Date().timeIntervalSince(lastFailure) < Self.cooldown { return nil }
+        let task = Task { await operation() }
+        inFlight = task
+        let result = await task.value
+        inFlight = nil
+        lastFailure = result == nil ? Date() : nil
+        return result
     }
 }

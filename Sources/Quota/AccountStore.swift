@@ -20,7 +20,11 @@ final class AccountStore: ObservableObject {
     @Published private(set) var accounts: [Account]
 
     init(accounts: [Account] = Storage.loadAccounts()) {
-        self.accounts = accounts
+        self.accounts = accounts.map { account in
+            var account = account
+            if account.plan?.lowercased() == "unknown" { account.plan = nil }
+            return account
+        }
     }
 
     func add(_ account: Account) {

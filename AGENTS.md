@@ -11,7 +11,7 @@ Native macOS menu bar app (Swift, AppKit + SwiftUI, SwiftPM) that shows remainin
 
 ## Commands
 
-- Test: `scripts/test.sh` (adds the Swift Testing macro plugin path required by Command Line Tools).
+- Test: `scripts/test.sh` (adds the Swift Testing macro plugin path required by Command Line Tools). Live tests against the real CLIs and Keychain are skipped unless `QUOTA_LIVE_TESTS=1`.
 - Build app bundle: `scripts/build-app.sh`; build and install into `~/Applications`: `scripts/build-app.sh --install`.
 - End-to-end check without UI: `~/Applications/Quota.app/Contents/MacOS/Quota --print` (linked accounts, or detected CLI logins when none are linked).
 - Render UI previews with sample data: `.build/debug/Quota --render-preview <dir>`. AppKit-backed controls (buttons, menus, spinners) render as placeholders there, except in `readme-*.png`, which use the `isStaticPreview` environment flag. Regenerate `docs/screenshots/readme-{light,dark}.png` from it after visible UI changes.
@@ -25,7 +25,7 @@ With the macOS 27 SDK, SwiftUI `@State` is a macro whose plugin is missing from 
 
 The user decides which accounts are monitored; nothing is linked automatically. Accounts are stored (without secrets) in the `com.turinglabs.quota.shared` defaults suite.
 
-- **Shared login** (`Account.Source.cli`): reuses the CLI's own session read-only (Claude Keychain item `Claude Code-credentials`, `~/.codex` via the Codex CLI, `~/.grok/auth.json`). Quota never refreshes or writes it.
+- **Shared login** (`Account.Source.cli`): reuses the CLI's own session (Claude Keychain item `Claude Code-credentials`, `~/.codex` via the Codex CLI, `~/.grok/auth.json`). Quota never refreshes or writes these tokens itself: refresh tokens rotate, so doing it would sign the CLI out. When the shared Claude token has expired, Quota briefly starts `claude` in a pseudo-terminal so the CLI renews its own token, then retries (one attempt at a time, 10-minute cooldown after a failure; see `SharedClaudeLogin`).
 - **Linked by Quota** (`.managed`): isolated home at `~/Library/Application Support/Quota/Accounts/<provider>/<uuid>`, signed in through the official CLI in the browser:
   - Codex: `CODEX_HOME=<home> codex login`; usage via `codex app-server` with the same `CODEX_HOME`, so Codex refreshes its own token.
   - Grok: `GROK_HOME=<home> grok login --oauth` inside `script` (Grok expects a TTY); expired tokens are refreshed by running `grok models` with the same home.

@@ -97,7 +97,7 @@ enum PreviewRenderer {
 
     private static func issueEntries(now: Date) -> [UUID: UsageStore.Entry] {
         var entries = healthyEntries(now: now)
-        entries[claude.id]?.issue = .sessionExpired(String(localized: "Session expired. Open Claude Code to renew it."))
+        entries[claude.id]?.issue = .sessionExpired(String(localized: "The Claude Code session expired and could not be renewed automatically. Run `claude` in a terminal."))
         entries[claude.id]?.snapshot?.fetchedAt = now.addingTimeInterval(-900)
         entries[codex.id] = UsageStore.Entry(snapshot: nil, issue: .sessionExpired(String(localized: "Codex session expired: relink the account.")))
         entries[grok.id] = UsageStore.Entry(snapshot: nil, issue: .network)

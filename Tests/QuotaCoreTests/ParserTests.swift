@@ -244,6 +244,7 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(CodexParser.identity(from: json(#"{ "account": { "type": "chatgpt", "email": "me@example.com", "planType": "plus" }, "requiresOpenaiAuth": true }"#))
             == AccountIdentity(email: "me@example.com", plan: "Plus"))
         #expect(CodexParser.identity(from: json(#"{ "account": null, "requiresOpenaiAuth": true }"#)) == nil)
+        #expect(CodexParser.identity(from: json(#"{ "account": { "email": "me@example.com", "planType": "unknown" } }"#))?.plan == nil)
     }
 
     @Test func extractsLoginURLFromTerminalOutput() {
@@ -263,5 +264,15 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(try JSONDecoder().decode([Account].self, from: encoded) == [account])
         #expect(account.home?.path.hasSuffix("Quota/Accounts/grok/\(account.id.uuidString)") == true)
         #expect(Account(provider: .claude, source: .cli, email: nil, plan: nil).home == nil)
+    }
+}
+
+// Live check against the real Claude Code CLI and Keychain; run with QUOTA_LIVE_TESTS=1 scripts/test.sh.
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["QUOTA_LIVE_TESTS"] != nil))
+struct SharedClaudeLoginLiveTests {
+    @Test func renewReturnsTheCurrentCLISession() async throws {
+        let current = try #require(await SharedClaudeLogin.read())
+        let renewed = try #require(await SharedClaudeLogin.renew(replacing: "stale-\(UUID().uuidString)"))
+        #expect(renewed.accessToken == current.accessToken || !renewed.isExpiring(at: Date()))
     }
 }

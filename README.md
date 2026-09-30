@@ -62,6 +62,8 @@ To stop monitoring an account, open its `…` menu and choose **Unlink account**
 
 Quota refreshes every 5 minutes, after wake, when a window resets and when you open the popover. It only talks to the services above.
 
+Tokens are renewed by the official CLIs, never by Quota. If the Claude Code token has expired because you have not used `claude` in a while, Quota starts it in the background for a few seconds so it can renew its own session, then retries.
+
 These endpoints are the ones the official CLIs use. They are not public APIs and may change without notice.
 
 ### Where data lives

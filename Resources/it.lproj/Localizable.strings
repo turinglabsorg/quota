@@ -33,7 +33,7 @@
 "Unrecognized response." = "Risposta non riconosciuta.";
 "This account has no subscription limits." = "Questo account non ha limiti di abbonamento.";
 "Not signed in to Claude Code. Run `claude` in a terminal." = "Nessun login a Claude Code. Esegui `claude` nel terminale.";
-"Session expired. Open Claude Code to renew it." = "Sessione scaduta. Apri Claude Code per rinnovarla.";
+"The Claude Code session expired and could not be renewed automatically. Run `claude` in a terminal." = "La sessione di Claude Code è scaduta e non è stato possibile rinnovarla automaticamente. Esegui `claude` nel terminale.";
 "Credentials not found: unlink and relink the account." = "Credenziali non trovate: scollega e ricollega l'account.";
 "Session expired: unlink and relink the account." = "Sessione scaduta: scollega e ricollega l'account.";
 "`codex` CLI not found." = "CLI `codex` non trovata.";
