@@ -13,7 +13,7 @@ Native macOS menu bar app (Swift, AppKit + SwiftUI, SwiftPM) that shows remainin
 
 - Test: `scripts/test.sh` (adds the Swift Testing macro plugin path required by Command Line Tools). Live tests against the real CLIs and Keychain are skipped unless `QUOTA_LIVE_TESTS=1`.
 - Build app bundle: `scripts/build-app.sh`; build and install into `~/Applications`: `scripts/build-app.sh --install`.
-- End-to-end check without UI: `~/Applications/Quota.app/Contents/MacOS/Quota --print` (linked accounts, or detected CLI logins when none are linked).
+- End-to-end check without UI: `~/Applications/Quota.app/Contents/MacOS/Quota --print` (linked accounts, or detected CLI logins when none are linked). `QUOTA_DEBUG=1` logs failed HTTP responses, `QUOTA_DEBUG=verbose` logs every usage response body (never tokens).
 - Render UI previews with sample data: `.build/debug/Quota --render-preview <dir>`. AppKit-backed controls (buttons, menus, spinners) render as placeholders there, except in `readme-*.png`, which use the `isStaticPreview` environment flag. Regenerate `docs/screenshots/readme-{light,dark}.png` from it after visible UI changes.
 - Check a translation live: `build/Quota.app/Contents/MacOS/Quota --print -AppleLanguages '(it)'`.
 
@@ -38,7 +38,7 @@ Mirrors Orca (github.com/stablyai/orca, `src/main/rate-limits`, `src/main/*-acco
 
 - Claude: `GET https://api.anthropic.com/api/oauth/usage` with `anthropic-beta: oauth-2025-04-20`.
 - Codex: JSON-RPC `account/read` + `account/rateLimits/read` on `codex app-server`; fallback `GET https://chatgpt.com/backend-api/wham/usage` for the shared login when the CLI is missing.
-- Grok: `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` with `X-XAI-Token-Auth: xai-grok-cli`, falling back to `/v1/billing` for monthly budgets.
+- Grok: `GET https://cli-chat-proxy.grok.com/v1/billing?format=credits` with `X-XAI-Token-Auth: xai-grok-cli`, falling back to `/v1/billing` for monthly budgets. The API omits zero-valued fields: a missing `creditUsagePercent` means 0% only when the weekly `currentPeriod` matches `billingPeriodStart/End` and no field shows explicit zeros or spend (same rule as Orca).
 
 ## Rules
 

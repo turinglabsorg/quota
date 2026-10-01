@@ -41,8 +41,9 @@ enum HTTP {
         }
         let http = response as? HTTPURLResponse
         let status = http?.statusCode ?? 0
-        if ProcessInfo.processInfo.environment["QUOTA_DEBUG"] != nil, !(200..<300).contains(status) {
-            let body = String(decoding: data.prefix(300), as: UTF8.self)
+        let debug = ProcessInfo.processInfo.environment["QUOTA_DEBUG"]
+        if let debug, debug == "verbose" || !(200..<300).contains(status) {
+            let body = String(decoding: data.prefix(debug == "verbose" ? 4_000 : 300), as: UTF8.self)
             FileHandle.standardError.write(Data("[\(request.url?.host() ?? "")] HTTP \(status) body=\(body)\n".utf8))
         }
         switch status {

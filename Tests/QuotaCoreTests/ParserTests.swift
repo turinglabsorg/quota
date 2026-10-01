@@ -151,6 +151,53 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(billing == .usage(plan: "SuperGrok Heavy", window: UsageWindow(kind: .monthly, usedPercent: 25, resetsAt: nil)))
     }
 
+    @Test func treatsOmittedPercentInConfirmedWeeklyPeriodAsZero() throws {
+        let billing = try GrokParser.credits(from: json("""
+        {
+          "config": {
+            "currentPeriod": {
+              "type": "USAGE_PERIOD_TYPE_WEEKLY",
+              "start": "2026-10-01T07:17:10.164276+00:00",
+              "end": "2026-10-08T07:17:10.164276+00:00"
+            },
+            "onDemandCap": { "val": 0 },
+            "onDemandUsed": { "val": 0 },
+            "isUnifiedBillingUser": true,
+            "prepaidBalance": { "val": 0 },
+            "topUpMethod": "TOP_UP_METHOD_SAVED_PAYMENT_METHOD",
+            "billingPeriodStart": "2026-10-01T07:17:10.164276+00:00",
+            "billingPeriodEnd": "2026-10-08T07:17:10.164276+00:00"
+          }
+        }
+        """))
+        #expect(billing == .usage(plan: nil, window: UsageWindow(kind: .weekly, usedPercent: 0, resetsAt: Timestamp.iso("2026-10-08T07:17:10Z"))))
+    }
+
+    @Test func keepsOmittedPercentUnknownWithoutConfirmation() throws {
+        let mismatchedPeriod = try GrokParser.credits(from: json("""
+        { "config": {
+            "currentPeriod": { "type": "USAGE_PERIOD_TYPE_WEEKLY", "start": "2026-10-01T00:00:00Z", "end": "2026-10-08T00:00:00Z" },
+            "billingPeriodStart": "2026-10-01T00:00:00Z", "billingPeriodEnd": "2026-11-01T00:00:00Z" } }
+        """))
+        #expect(mismatchedPeriod == .needsMonthlyView(plan: nil))
+
+        let spendWithoutPercent = try GrokParser.credits(from: json("""
+        { "config": {
+            "currentPeriod": { "type": "USAGE_PERIOD_TYPE_WEEKLY", "start": "2026-10-01T00:00:00Z", "end": "2026-10-08T00:00:00Z" },
+            "billingPeriodStart": "2026-10-01T00:00:00Z", "billingPeriodEnd": "2026-10-08T00:00:00Z",
+            "onDemandCap": { "val": 0 }, "onDemandUsed": { "val": 3 } } }
+        """))
+        #expect(spendWithoutPercent == .needsMonthlyView(plan: nil))
+
+        let explicitZeros = try GrokParser.credits(from: json("""
+        { "config": {
+            "currentPeriod": { "type": "USAGE_PERIOD_TYPE_WEEKLY", "start": "2026-10-01T00:00:00Z", "end": "2026-10-08T00:00:00Z" },
+            "billingPeriodStart": "2026-10-01T00:00:00Z", "billingPeriodEnd": "2026-10-08T00:00:00Z",
+            "onDemandCap": { "val": 50 }, "prepaidBalance": { "val": 0 } } }
+        """))
+        #expect(explicitZeros == .needsMonthlyView(plan: nil))
+    }
+
     @Test func asksForMonthlyViewWhenPercentMissing() throws {
         #expect(try GrokParser.credits(from: json(#"{ "config": { "subscriptionTier": "Enterprise" } }"#)) == .needsMonthlyView(plan: "Enterprise"))
         #expect(try GrokParser.credits(from: json(#"{ "unrelated": true }"#)) == .noQuota)

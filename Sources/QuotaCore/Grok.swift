@@ -50,7 +50,7 @@ public enum GrokParser {
         let period = JSON.dict(config["currentPeriod"])
         let resetsAt = Timestamp.date(period?["end"]) ?? Timestamp.date(config["billingPeriodEnd"])
 
-        if let percent = JSON.number(config["creditUsagePercent"]) {
+        if let percent = weeklyPercent(config) {
             let kind: UsageWindow.Kind = JSON.string(period?["type"]) == "USAGE_PERIOD_TYPE_MONTHLY" ? .monthly : .weekly
             return .usage(plan: plan, window: UsageWindow(kind: kind, usedPercent: percent, resetsAt: resetsAt))
         }
@@ -74,6 +74,34 @@ public enum GrokParser {
             "subscriptionTier", "monthlyLimit", "used", "onDemandCap", "onDemandUsed", "prepaidBalance",
         ]
         return flatFields.contains { root[$0] != nil } ? root : nil
+    }
+
+    // The billing API omits zero-valued fields, so a missing creditUsagePercent can mean 0% used.
+    // It only does when the weekly period is confirmed and no other field shows explicit zeros or spend.
+    private static func weeklyPercent(_ config: [String: Any]) -> Double? {
+        if config["creditUsagePercent"] != nil { return JSON.number(config["creditUsagePercent"]) }
+        if omittedPercentIsUnreported(config) || monthlyWindow(config, resetsAt: nil) != nil { return nil }
+        return hasConfirmedWeeklyPeriod(config) ? 0 : nil
+    }
+
+    private static func money(_ value: Any?) -> Double? {
+        JSON.number(JSON.dict(value)?["val"])
+    }
+
+    private static func omittedPercentIsUnreported(_ config: [String: Any]) -> Bool {
+        if money(config["onDemandCap"]) == 0 {
+            return ["onDemandUsed", "used"].contains { (money(config[$0]) ?? 0) > 0 }
+        }
+        return ["onDemandCap", "onDemandUsed", "prepaidBalance", "monthlyLimit", "used"].contains { money(config[$0]) == 0 }
+    }
+
+    private static func hasConfirmedWeeklyPeriod(_ config: [String: Any]) -> Bool {
+        guard let period = JSON.dict(config["currentPeriod"]),
+              JSON.string(period["type"]) == "USAGE_PERIOD_TYPE_WEEKLY",
+              let start = Timestamp.date(period["start"]),
+              let end = Timestamp.date(period["end"])
+        else { return false }
+        return start == Timestamp.date(config["billingPeriodStart"]) && end == Timestamp.date(config["billingPeriodEnd"])
     }
 
     private static func monthlyWindow(_ config: [String: Any], resetsAt: Date?) -> UsageWindow? {

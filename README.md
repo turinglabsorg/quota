@@ -81,7 +81,7 @@ build/Quota.app/Contents/MacOS/Quota --print      # print usage for linked accou
 .build/debug/Quota --render-preview /tmp/quota    # render UI previews with sample data
 ```
 
-Set `QUOTA_DEBUG=1` to log failed HTTP responses (status and body, never tokens) to stderr.
+Set `QUOTA_DEBUG=1` to log failed HTTP responses (status and body, never tokens) to stderr, or `QUOTA_DEBUG=verbose` to log every usage response.
 
 The design system lives in [`DESIGN.md`](DESIGN.md); contributor notes for humans and coding agents are in [`AGENTS.md`](AGENTS.md).
 
