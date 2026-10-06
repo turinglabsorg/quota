@@ -4,6 +4,7 @@ public enum Provider: String, CaseIterable, Identifiable, Codable, Sendable {
     case claude
     case codex
     case grok
+    case ollama
 
     public var id: String { rawValue }
 
@@ -12,6 +13,7 @@ public enum Provider: String, CaseIterable, Identifiable, Codable, Sendable {
         case .claude: "Claude"
         case .codex: "Codex"
         case .grok: "Grok"
+        case .ollama: "Ollama Cloud"
         }
     }
 
@@ -20,6 +22,7 @@ public enum Provider: String, CaseIterable, Identifiable, Codable, Sendable {
         case .claude: "Claude Code"
         case .codex: "Codex"
         case .grok: "Grok"
+        case .ollama: "Ollama"
         }
     }
 
@@ -28,6 +31,7 @@ public enum Provider: String, CaseIterable, Identifiable, Codable, Sendable {
         case .claude: "claude"
         case .codex: "codex"
         case .grok: "grok"
+        case .ollama: "ollama"
         }
     }
 }

@@ -14,7 +14,12 @@ enum HTTP {
     }()
 
     static func get(_ url: URL, headers: [String: String]) async throws -> Data {
+        try await send(method: "GET", url: url, headers: headers)
+    }
+
+    static func send(method: String, url: URL, headers: [String: String]) async throws -> Data {
         var request = URLRequest(url: url)
+        request.httpMethod = method
         for (field, value) in headers {
             request.setValue(value, forHTTPHeaderField: field)
         }

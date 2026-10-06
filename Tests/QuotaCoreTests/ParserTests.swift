@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import Testing
 @testable import QuotaCore
@@ -292,6 +293,7 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
             == AccountIdentity(email: "me@example.com", plan: "Plus"))
         #expect(CodexParser.identity(from: json(#"{ "account": null, "requiresOpenaiAuth": true }"#)) == nil)
         #expect(CodexParser.identity(from: json(#"{ "account": { "email": "me@example.com", "planType": "unknown" } }"#))?.plan == nil)
+        #expect(CodexParser.identity(from: json(#"{ "account": { "email": "me@example.com", "planType": "self_serve_business_prolite" } }"#))?.plan == "Business")
     }
 
     @Test func extractsLoginURLFromTerminalOutput() {
@@ -311,6 +313,109 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(try JSONDecoder().decode([Account].self, from: encoded) == [account])
         #expect(account.home?.path.hasSuffix("Quota/Accounts/grok/\(account.id.uuidString)") == true)
         #expect(Account(provider: .claude, source: .cli, email: nil, plan: nil).home == nil)
+    }
+}
+
+private func hex(_ string: String) -> Data {
+    Data(stride(from: 0, to: string.count, by: 2).map { offset in
+        let start = string.index(string.startIndex, offsetBy: offset)
+        return UInt8(string[start..<string.index(start, offsetBy: 2)], radix: 16)!
+    })
+}
+
+@Suite struct OllamaTests {
+    // RFC 8032, section 7.1, test 1.
+    private let seed = hex("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+
+    @Test func derivesTheRFC8032PublicKey() throws {
+        let key = try #require(OllamaKey(seed: seed))
+        #expect(key.publicKey == hex("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"))
+        #expect(key.authorizedKey.hasPrefix("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5"))
+    }
+
+    @Test func signsRequestsLikeTheOllamaCLI() throws {
+        let key = try #require(OllamaKey(seed: seed))
+        let parts = try key.authorization(method: "GET", path: "/api/usage", timestamp: "1770000000").split(separator: ":").map(String.init)
+        #expect(parts.count == 2)
+        #expect(Data(base64Encoded: parts[0]) == key.publicBlob)
+        let signature = try #require(Data(base64Encoded: parts[1]))
+        let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: key.publicKey)
+        #expect(publicKey.isValidSignature(signature, for: Data("GET,/api/usage?ts=1770000000".utf8)))
+    }
+
+    @Test func buildsTheConnectLinkOllamaOpens() throws {
+        let key = try #require(OllamaKey(seed: seed))
+        let url = OllamaCloud.connectURL(for: key, deviceName: "my mac").absoluteString
+        #expect(url.hasPrefix("https://ollama.com/connect?name=my%20mac&key="))
+        let encoded = String(try #require(url.split(separator: "=", maxSplits: 2).last))
+        #expect(!encoded.contains("="))
+        let padded = encoded.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+            + String(repeating: "=", count: (4 - encoded.count % 4) % 4)
+        #expect(Data(base64Encoded: padded).map { String(decoding: $0, as: UTF8.self) } == key.authorizedKey)
+    }
+
+    @Test func roundTripsOpenSSHKeys() throws {
+        let key = try #require(OllamaKey(seed: seed))
+        let text = OpenSSHKey.text(for: key)
+        #expect(text.hasPrefix("-----BEGIN OPENSSH PRIVATE KEY-----\n"))
+        #expect(OpenSSHKey.seed(from: text) == seed)
+        #expect(OpenSSHKey.seed(from: "garbage") == nil)
+        #expect(OpenSSHKey.seed(from: "-----BEGIN OPENSSH PRIVATE KEY-----\nbm90IGEga2V5\n-----END OPENSSH PRIVATE KEY-----") == nil)
+    }
+
+    @Test func interoperatesWithSSHKeygen() throws {
+        let directory = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let theirs = directory.appending(path: "theirs")
+        _ = try sshKeygen(["-q", "-t", "ed25519", "-N", "", "-C", "", "-f", theirs.path])
+        let theirSeed = try #require(OpenSSHKey.seed(from: String(contentsOf: theirs, encoding: .utf8)))
+        let theirKey = try #require(OllamaKey(seed: theirSeed))
+        let publicLine = try String(contentsOf: theirs.appendingPathExtension("pub"), encoding: .utf8)
+        #expect(publicLine.split(separator: " ").prefix(2).joined(separator: " ") == theirKey.authorizedKey)
+
+        let mine = directory.appending(path: "mine")
+        let key = try #require(OllamaKey(seed: seed))
+        try OpenSSHKey.text(for: key).write(to: mine, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: mine.path)
+        let derived = try sshKeygen(["-y", "-f", mine.path])
+        #expect(derived.split(separator: " ").prefix(2).joined(separator: " ") == key.authorizedKey)
+    }
+
+    @Test func mapsTheMonthlyPool() throws {
+        let windows = try OllamaParser.usage(from: json("""
+        {
+          "activity": { "cost": "0.00000", "period": { "type": "last_4_weeks" }, "models": [] },
+          "limits": { "monthly": { "usage": 0.445, "models": [ { "name": "kimi-k3", "request_count": 1683 } ] } }
+        }
+        """))
+        #expect(windows == [UsageWindow(kind: .monthly, usedPercent: 44.5, resetsAt: nil)])
+        #expect(windows[0].remainingPercent(at: Date()) == 55)
+    }
+
+    @Test func mapsLegacyWindowsAndIgnoresInvalidFractions() throws {
+        let windows = try OllamaParser.usage(from: json(#"{ "Limits": { "Session": { "Usage": 0.067 }, "weekly": { "usage": 1.7 } } }"#))
+        #expect(windows.map(\.kind) == [.session])
+        #expect(try OllamaParser.usage(from: json(#"{ "limits": {} }"#)).isEmpty)
+        #expect(throws: ProviderIssue.invalidResponse) { try OllamaParser.usage(from: json(#"{ "error": "invalid credentials" }"#)) }
+    }
+
+    @Test func treatsAnEmptyUserAsNotLinked() {
+        #expect(OllamaParser.identity(from: json(#"{ "ID": "1", "Email": "me@example.com", "Name": "me", "Plan": "max" }"#))
+            == AccountIdentity(email: "me@example.com", plan: "Max"))
+        #expect(OllamaParser.identity(from: json(#"{ "ID": "00000000-0000-0000-0000-000000000000", "Email": "", "Name": "", "Plan": "" }"#)) == nil)
+    }
+
+    private func sshKeygen(_ arguments: [String]) throws -> String {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(filePath: "/usr/bin/ssh-keygen")
+        process.arguments = arguments
+        process.standardOutput = output
+        try process.run()
+        process.waitUntilExit()
+        return String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
     }
 }
 

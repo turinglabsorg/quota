@@ -47,12 +47,18 @@ public enum CodexParser {
             let minutes = JSON.number(raw["limit_window_seconds"]).map { Int(($0 / 60).rounded(.up)) }
             return UsageWindow(kind: kind(minutes: minutes, fallback: slot.fallback), usedPercent: used, resetsAt: resetsAt)
         }
-        return (Formatting.capitalized(planType), sorted(windows))
+        return (planName(planType), sorted(windows))
     }
 
     private static func planLabel(_ value: Any?) -> String? {
         guard let plan = JSON.string(value), plan.lowercased() != "unknown" else { return nil }
-        return Formatting.capitalized(plan)
+        return planName(plan)
+    }
+
+    // ChatGPT plan identifiers as people know them: `self_serve_business_prolite` is a Business seat.
+    static func planName(_ plan: String) -> String {
+        if plan.lowercased().hasPrefix("self_serve_business") { return "Business" }
+        return Formatting.capitalized(plan.replacingOccurrences(of: "_", with: " "))
     }
 
     private static func kind(minutes: Int?, fallback: UsageWindow.Kind) -> UsageWindow.Kind {
