@@ -93,6 +93,13 @@ enum OllamaCloud {
         return key
     }
 
+    // The name `ollama signin` gives the device (Go's os.Hostname); ProcessInfo.hostName may wait on DNS.
+    static var deviceName: String {
+        var buffer = [CChar](repeating: 0, count: 256)
+        guard gethostname(&buffer, buffer.count) == 0 else { return "Mac" }
+        return String(cString: buffer)
+    }
+
     // Same link `ollama signin` opens: ollama.com asks the user to sign in and links this key.
     static func connectURL(for key: OllamaKey, deviceName: String) -> URL {
         var components = URLComponents(string: "https://ollama.com/connect")!

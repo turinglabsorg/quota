@@ -100,7 +100,7 @@ public enum AccountLinker {
     // Like `ollama signin`: a new device key, linked on ollama.com to the account the user signs in to.
     private static func signInOllama(home: URL, onLoginURL: @escaping @Sendable (URL) -> Void) async throws -> AccountIdentity {
         let key = try OllamaCloud.createKey(at: home.appending(path: OllamaCloud.keyPath))
-        let url = OllamaCloud.connectURL(for: key, deviceName: ProcessInfo.processInfo.hostName)
+        let url = OllamaCloud.connectURL(for: key, deviceName: OllamaCloud.deviceName)
         onLoginURL(url)
         _ = try? await CommandRunner.run(URL(filePath: "/usr/bin/open"), [url.absoluteString], timeout: 10)
         let deadline = Date().addingTimeInterval(loginTimeout)
