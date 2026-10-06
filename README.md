@@ -13,7 +13,7 @@ Inspired by the usage readout in [Orca](https://github.com/stablyai/orca), packa
 
 ## Features
 
-- **Menu bar**: one percentage per linked account, showing the tightest account-wide window. Orange under 20%, red under 5%.
+- **Menu bar**: one percentage per linked account, showing the tightest account-wide window. Accounts with both a 5-hour session and a weekly (or monthly) window, like Claude, show both in a small stacked column: session above, weekly below. Orange under 20%, red under 5%.
 - **Popover**: every window (5-hour session, weekly, model-scoped weekly, monthly) with a bar and a reset countdown.
 - **You choose the accounts**: reuse the login of a CLI already on your Mac, or sign in to a different account in the browser. New sign-ins are kept separate from your CLI sessions, so you can monitor several accounts per service.
 - **Settings**: show remaining or used percentage, add accounts, launch at login.

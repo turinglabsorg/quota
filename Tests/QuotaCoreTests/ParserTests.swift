@@ -249,6 +249,23 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(modelOnly.tightestWindow(at: now)?.kind == .weeklyModel("Fable"))
     }
 
+    @Test func menuBarStacksSessionAboveTheLongerWindow() {
+        let now = Date()
+        let claude = ProviderSnapshot(provider: .claude, plan: nil, windows: [
+            UsageWindow(kind: .session, usedPercent: 30, resetsAt: nil),
+            UsageWindow(kind: .weekly, usedPercent: 60, resetsAt: nil),
+            UsageWindow(kind: .weeklyModel("Fable"), usedPercent: 95, resetsAt: nil),
+        ])
+        #expect(claude.menuBarWindows(at: now).map(\.kind) == [.session, .weekly])
+        let weeklyOnly = ProviderSnapshot(provider: .codex, plan: nil, windows: [UsageWindow(kind: .weekly, usedPercent: 40, resetsAt: nil)])
+        #expect(weeklyOnly.menuBarWindows(at: now).map(\.kind) == [.weekly])
+        let legacyOllama = ProviderSnapshot(provider: .ollama, plan: nil, windows: [
+            UsageWindow(kind: .monthly, usedPercent: 50, resetsAt: nil),
+            UsageWindow(kind: .session, usedPercent: 10, resetsAt: nil),
+        ])
+        #expect(legacyOllama.menuBarWindows(at: now).map(\.kind) == [.session, .monthly])
+    }
+
     @Test func levelsFollowRemainingPercent() {
         #expect(UsageLevel(remainingPercent: 50) == .normal)
         #expect(UsageLevel(remainingPercent: 20) == .warning)

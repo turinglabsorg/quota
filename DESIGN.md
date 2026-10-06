@@ -5,7 +5,7 @@ Quota is a native macOS menu bar utility. It should feel like part of the system
 ## Principles
 
 - **The user chooses.** Nothing is monitored until the user links an account.
-- **Glanceable first.** The menu bar shows one number per linked account: the tightest account-wide window. Model-scoped limits (e.g. weekly Fable) appear only in the popover because they do not block the whole account.
+- **Glanceable first.** The menu bar shows one number per linked account: the tightest account-wide window. When an account reports both a 5-hour session and a weekly (or monthly) window, it shows both, stacked: session above, weekly below. Model-scoped limits (e.g. weekly Fable) appear only in the popover because they do not block the whole account.
 - **Color means state.** Neutral when healthy, orange when running low, red when nearly exhausted. Brand color is limited to the Claude glyph in the popover.
 - **Native materials.** Popover uses the system `NSPopover` material, SF Pro, and system semantic colors so light/dark and accessibility settings work for free.
 
@@ -31,6 +31,7 @@ System font (SF Pro) only. Digits always use `monospacedDigit()` so values do no
 | Role | Size | Weight |
 | --- | --- | --- |
 | Menu bar value | 12 | medium |
+| Menu bar stacked values | 8.5 | semibold |
 | Popover title, provider name | 13 | semibold |
 | Window label | 12 | regular |
 | Window value | 12 | semibold |
@@ -42,7 +43,7 @@ System font (SF Pro) only. Digits always use `monospacedDigit()` so values do no
 - Popover width 320 pt; header padding 16 horizontal, 14 top, 12 bottom; card list padding 10.
 - Cards: 12 pt padding, 10 pt continuous corner radius, 8 pt gap between cards, 12 pt gap between rows.
 - Usage bar: 5 pt tall capsule; non-zero values render at least 5 pt wide.
-- Menu bar: 7 pt horizontal padding, 9 pt between providers, 3 pt between glyph and value, glyph 11 pt.
+- Menu bar: 7 pt horizontal padding, 9 pt between providers, 3 pt between glyph and value, glyph 11 pt. Stacked values sit at -2.5 pt spacing, closer than their line boxes, to leave room above and below.
 
 ## Glyphs
 
@@ -55,7 +56,7 @@ Custom stroked shapes, line width 15% of the glyph size, round caps and joins, d
 
 ## Components
 
-- **Status label** (`StatusLabelView`): glyph + percentage per linked account; falls back to the `gauge.with.dots.needle.33percent` symbol when nothing is available.
+- **Status label** (`StatusLabelView`, `ProviderSnapshot.menuBarWindows`): glyph + percentage per linked account, or glyph + two stacked percentages (session, weekly) each colored by its own level, with the glyph taking the tighter one's color; falls back to the `gauge.with.dots.needle.33percent` symbol when nothing is available.
 - **Account card** (`AccountCard`): header (glyph, provider name, account email in 11 pt secondary, plan badge, `ellipsis` menu with source and "Unlink account"), one `WindowRow` per window, optional `IssueLine`.
 - **Empty state**: card with title, one-line explanation and a small `borderedProminent` "Add account" button.
 - **Add account panel** (`AddAccountPanel`): back chevron + title header; one `ProviderLinkCard` per provider with the detected CLI login ("Link" small bordered button, or "Linked" with checkmark) and a sign-in row ("Sign in to another account…" → spinner + "Finish signing in in your browser…" + "Cancel", or `IssueLine` + "Try again"); footnote explaining that sign-in happens in the browser.

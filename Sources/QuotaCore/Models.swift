@@ -148,6 +148,15 @@ public struct ProviderSnapshot: Equatable, Sendable {
         self.fetchedAt = fetchedAt
     }
 
+    /// The menu bar shows the 5-hour session above the longer window (weekly or monthly) when an
+    /// account reports both, otherwise the tightest account-wide window.
+    public func menuBarWindows(at now: Date) -> [UsageWindow] {
+        let session = windows.first { $0.kind == .session }
+        let longer = windows.first { $0.kind == .weekly } ?? windows.first { $0.kind == .monthly }
+        if let session, let longer { return [session, longer] }
+        return tightestWindow(at: now).map { [$0] } ?? []
+    }
+
     public func tightestWindow(at now: Date) -> UsageWindow? {
         let accountWide = windows.filter {
             if case .weeklyModel = $0.kind { return false }
