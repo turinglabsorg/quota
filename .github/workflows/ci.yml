@@ -1,0 +1,24 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Toolchain
+        run: swift --version
+      - name: Test
+        run: scripts/test.sh
+      - name: Build
+        run: swift build
+      - name: Render previews
+        run: .build/debug/Quota --render-preview "$RUNNER_TEMP/previews"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: previews
+          path: ${{ runner.temp }}/previews
