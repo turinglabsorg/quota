@@ -13,6 +13,7 @@ struct ProviderGlyph: View {
                 case .claude: ClaudeBurst().stroke(style: style)
                 case .codex: CodexPrompt().stroke(style: style)
                 case .grok: GrokMark().stroke(style: style)
+                case .ollama: OllamaHead().stroke(style: style)
                 }
             }
             .frame(width: size, height: size)
@@ -26,7 +27,7 @@ extension Provider {
     var accent: Color {
         switch self {
         case .claude: Color(red: 0.851, green: 0.467, blue: 0.341)
-        case .codex, .grok: .primary
+        case .codex, .grok, .ollama: .primary
         }
     }
 }
@@ -71,6 +72,29 @@ private struct GrokMark: Shape {
         path.addArc(center: center, radius: radius, startAngle: .degrees(-10), endAngle: .degrees(-80), clockwise: false)
         path.move(to: CGPoint(x: center.x - size * 0.44, y: center.y + size * 0.44))
         path.addLine(to: CGPoint(x: center.x + size * 0.44, y: center.y - size * 0.44))
+        return path
+    }
+}
+
+private struct OllamaHead: Shape {
+    func path(in rect: CGRect) -> Path {
+        func point(_ x: Double, _ y: Double) -> CGPoint {
+            CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
+        }
+        var path = Path()
+        path.move(to: point(0.37, 0.4))
+        path.addLine(to: point(0.29, 0.08))
+        path.move(to: point(0.63, 0.4))
+        path.addLine(to: point(0.71, 0.08))
+        path.addRoundedRect(
+            in: CGRect(origin: point(0.16, 0.4), size: CGSize(width: rect.width * 0.68, height: rect.height * 0.54)),
+            cornerSize: CGSize(width: rect.width * 0.2, height: rect.height * 0.2)
+        )
+        // Very short strokes with round caps read as the eyes.
+        for x in [0.39, 0.61] {
+            path.move(to: point(x, 0.635))
+            path.addLine(to: point(x, 0.645))
+        }
         return path
     }
 }

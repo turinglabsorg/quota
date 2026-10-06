@@ -129,7 +129,7 @@ struct UsagePanel: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("No linked accounts")
                 .font(.system(size: 13, weight: .semibold))
-            Text("Choose which Claude, Codex and Grok accounts to monitor.")
+            Text("Choose which Claude, Codex, Grok and Ollama Cloud accounts to monitor.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

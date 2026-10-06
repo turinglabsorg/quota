@@ -8,12 +8,13 @@ enum PreviewRenderer {
     private static let claude = Account(provider: .claude, source: .cli, email: "name@example.com", plan: "Team")
     private static let codex = Account(provider: .codex, source: .managed, email: "name@example.com", plan: "Plus")
     private static let grok = Account(provider: .grok, source: .managed, email: "name@example.com", plan: nil)
+    private static let ollama = Account(provider: .ollama, source: .managed, email: "name@example.com", plan: "Max")
 
     static func render(to directory: URL) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let now = Date()
         let settings = AppSettings()
-        let accounts = [claude, codex, grok]
+        let accounts = [claude, codex, grok, ollama]
         let variants: [(name: String, accounts: [Account], entries: [UUID: UsageStore.Entry])] = [
             ("healthy", accounts, healthyEntries(now: now)),
             ("issues", accounts, issueEntries(now: now)),
@@ -68,7 +69,11 @@ enum PreviewRenderer {
             let store = AccountStore(accounts: [claude])
             let linker = LinkController(
                 accounts: store,
-                sharedLogins: [.claude: AccountIdentity(email: "name@example.com", plan: "Team"), .codex: AccountIdentity(email: "other@example.com", plan: "Free")],
+                sharedLogins: [
+                    .claude: AccountIdentity(email: "name@example.com", plan: "Team"),
+                    .codex: AccountIdentity(email: "other@example.com", plan: "Free"),
+                    .ollama: AccountIdentity(email: "name@example.com", plan: "Max"),
+                ],
                 signInStates: [.codex: .waiting(URL(string: "https://auth.openai.com/oauth/authorize")), .grok: .failed(String(localized: "\(Provider.grok.displayName) sign-in was not completed."))]
             )
             write(
@@ -91,6 +96,9 @@ enum PreviewRenderer {
             ])),
             grok.id: UsageStore.Entry(snapshot: ProviderSnapshot(provider: .grok, plan: "SuperGrok", account: grok.email, windows: [
                 UsageWindow(kind: .weekly, usedPercent: 96, resetsAt: now.addingTimeInterval(3 * 86_400 + 9 * 3_600)),
+            ])),
+            ollama.id: UsageStore.Entry(snapshot: ProviderSnapshot(provider: .ollama, plan: "Max", account: ollama.email, windows: [
+                UsageWindow(kind: .monthly, usedPercent: 43, resetsAt: nil),
             ])),
         ]
     }

@@ -17,7 +17,7 @@ Quota is a native macOS menu bar utility. It should feel like part of the system
 | `level.warning` | `Color.orange` | 6–20% remaining (≥ 80% used, same threshold as Orca) |
 | `level.critical` | `Color.red` | 5% or less remaining |
 | `accent.claude` | `#D97757` | Claude glyph in the popover |
-| `accent.codex`, `accent.grok` | `Color.primary` | Monochrome brands |
+| `accent.codex`, `accent.grok`, `accent.ollama` | `Color.primary` | Monochrome brands |
 | `surface.card` | `Color.primary` at 5% opacity | Provider cards |
 | `surface.track` | `Color.primary` at 9% opacity | Empty part of usage bars |
 | `surface.badge` | `Color.primary` at 7% opacity | Plan badge |
@@ -51,6 +51,7 @@ Custom stroked shapes, line width 15% of the glyph size, round caps and joins, d
 - **Claude**: ten-ray burst with alternating ray length.
 - **Codex**: terminal prompt `>_`.
 - **Grok**: open ring with a diagonal slash.
+- **Ollama Cloud**: llama head, two ears leaning outwards over a rounded head with two eye dots.
 
 ## Components
 

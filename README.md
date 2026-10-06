@@ -1,10 +1,12 @@
 # Quota
 
-A tiny native macOS menu bar app that shows how much of your **Claude**, **Codex** and **Grok** subscription limits you have left, at a glance.
+A tiny native macOS menu bar app that shows how much of your **Claude**, **Codex**, **Grok** and **Ollama Cloud** subscription limits you have left, at a glance.
+
+On Linux, use [Quotax](https://github.com/turinglabsorg/quotax), the GNOME Shell version.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/readme-dark.png">
-  <img alt="Quota menu bar item and popover showing usage for Claude, Codex and Grok" src="docs/screenshots/readme-light.png" width="720">
+  <img alt="Quota menu bar item and popover showing usage for Claude, Codex, Grok and Ollama Cloud" src="docs/screenshots/readme-light.png" width="720">
 </picture>
 
 Inspired by the usage readout in [Orca](https://github.com/stablyai/orca), packaged as a standalone menu bar app.
@@ -25,12 +27,13 @@ Inspired by the usage readout in [Orca](https://github.com/stablyai/orca), packa
 | Claude (Claude Code login) | Pro, Max, Team | 5-hour session, weekly, weekly per model |
 | Codex (ChatGPT login) | Free, Plus, Pro, Business | as reported by Codex (5-hour, weekly or 30-day) |
 | Grok (Grok CLI login) | SuperGrok and Grok plans with weekly or monthly credits | weekly credits or monthly budget |
+| Ollama Cloud (ollama.com account) | Free, Pro, Max, Team | monthly usage pool (legacy Pro/Max: 5-hour session and weekly), no reset time |
 
 ## Requirements
 
 - macOS 14 or later
 - Swift 6 toolchain (Xcode or the Command Line Tools)
-- The CLI of each service you want to link: [`claude`](https://github.com/anthropics/claude-code), [`codex`](https://github.com/openai/codex), `grok`
+- The CLI of each service you want to link: [`claude`](https://github.com/anthropics/claude-code), [`codex`](https://github.com/openai/codex), `grok`. Ollama Cloud needs no CLI: sign in from the popover, or link the login of the [Ollama app](https://ollama.com/download) (`ollama signin`)
 
 ## Install
 
@@ -59,18 +62,20 @@ To stop monitoring an account, open its `…` menu and choose **Unlink account**
 | Claude | `GET api.anthropic.com/api/oauth/usage` with the Claude Code OAuth token |
 | Codex | JSON-RPC `account/rateLimits/read` on `codex app-server`, so Codex refreshes its own token |
 | Grok | `GET cli-chat-proxy.grok.com/v1/billing` with the Grok CLI token |
+| Ollama Cloud | `GET ollama.com/api/usage` and `POST ollama.com/api/me`, signed with an Ed25519 device key like the Ollama CLI does |
 
 Quota refreshes every 5 minutes, after wake, when a window resets and when you open the popover. It only talks to the services above.
 
 Tokens are renewed by the official CLIs, never by Quota. If the Claude Code token has expired because you have not used `claude` in a while, Quota starts it in the background for a few seconds so it can renew its own session, then retries.
 
-These endpoints are the ones the official CLIs use. They are not public APIs and may change without notice.
+These endpoints are the ones the official CLIs and ollama.com/settings use. They are not public APIs and may change without notice. Ollama reports only how much of each window is used, never when it resets, so Ollama Cloud windows show no countdown.
 
 ### Where data lives
 
 - Linked accounts (no secrets): the `com.turinglabs.quota.shared` user defaults suite.
 - Accounts signed in through Quota: `~/Library/Application Support/Quota/Accounts/<service>/<id>`, plus a scoped Keychain item for Claude.
 - Shared CLI logins stay where each CLI keeps them.
+- Ollama Cloud accounts signed in through Quota are a device key in their isolated folder, linked to your account on ollama.com; unlinking the account also removes the key from ollama.com.
 
 ## Development
 
@@ -95,7 +100,7 @@ The endpoints, headers and account-isolation approach follow [Orca](https://gith
 
 ## Disclaimer
 
-Quota is an independent project and is not affiliated with, endorsed by or sponsored by Anthropic, OpenAI or xAI. Claude, Codex and Grok are trademarks of their respective owners.
+Quota is an independent project and is not affiliated with, endorsed by or sponsored by Anthropic, OpenAI, xAI or Ollama. Claude, Codex, Grok and Ollama are trademarks of their respective owners.
 
 ## License
 

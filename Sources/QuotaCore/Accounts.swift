@@ -6,6 +6,7 @@ public enum UsageFetchers {
         case .claude: try await ClaudeFetcher(account: account).fetch()
         case .codex: try await CodexFetcher(account: account).fetch()
         case .grok: try await GrokFetcher(account: account).fetch()
+        case .ollama: try await OllamaFetcher(account: account).fetch()
         }
     }
 }
@@ -38,23 +39,25 @@ public enum AccountLinker {
             let placeholder = Account(provider: .grok, source: .cli, email: nil, plan: nil)
             guard let credentials = GrokFetcher.credentials(home: GrokFetcher.home(for: placeholder)) else { return nil }
             return AccountIdentity(email: credentials.email, plan: nil)
+        case .ollama:
+            let placeholder = Account(provider: .ollama, source: .cli, email: nil, plan: nil)
+            guard let key = OllamaCloud.readKey(at: OllamaCloud.keyFile(for: placeholder)) else { return nil }
+            return try? await OllamaCloud.whoami(key)
         }
     }
 
     public static func signIn(_ provider: Provider, accountID: UUID, onLoginURL: @escaping @Sendable (URL) -> Void) async throws -> AccountIdentity {
-        guard let executable = await CLI.locate(provider) else {
-            throw LinkError(String(localized: "`\(provider.executableName)` CLI not found: install it and try again."))
-        }
         let home = AccountPaths.home(provider: provider, id: accountID)
-        try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
         let onOutput: @Sendable (String) -> Void = { text in
             if let url = LoginURL.first(in: text) { onLoginURL(url) }
         }
         do {
+            try FileManager.default.createDirectory(at: home, withIntermediateDirectories: true)
             switch provider {
-            case .claude: return try await signInClaude(executable: executable, home: home, onOutput: onOutput)
-            case .codex: return try await signInCodex(executable: executable, home: home, onOutput: onOutput)
-            case .grok: return try await signInGrok(executable: executable, home: home, onOutput: onOutput)
+            case .claude: return try await signInClaude(executable: requireCLI(provider), home: home, onOutput: onOutput)
+            case .codex: return try await signInCodex(executable: requireCLI(provider), home: home, onOutput: onOutput)
+            case .grok: return try await signInGrok(executable: requireCLI(provider), home: home, onOutput: onOutput)
+            case .ollama: return try await signInOllama(home: home, onLoginURL: onLoginURL)
             }
         } catch {
             try? FileManager.default.removeItem(at: home)
@@ -78,8 +81,36 @@ public enum AccountLinker {
             if let executable = await CLI.locate(.grok) {
                 _ = try? await CommandRunner.run(executable, ["logout"], environment: ["GROK_HOME": home.path], timeout: 30)
             }
+        case .ollama:
+            if let key = OllamaCloud.readKey(at: home.appending(path: OllamaCloud.keyPath)) {
+                await OllamaCloud.disconnect(key)
+            }
         }
         try? FileManager.default.removeItem(at: home)
+    }
+
+    // Ollama Cloud links a key in the browser; the other services sign in through their CLI.
+    private static func requireCLI(_ provider: Provider) async throws -> URL {
+        guard let executable = await CLI.locate(provider) else {
+            throw LinkError(String(localized: "`\(provider.executableName)` CLI not found: install it and try again."))
+        }
+        return executable
+    }
+
+    // Like `ollama signin`: a new device key, linked on ollama.com to the account the user signs in to.
+    private static func signInOllama(home: URL, onLoginURL: @escaping @Sendable (URL) -> Void) async throws -> AccountIdentity {
+        let key = try OllamaCloud.createKey(at: home.appending(path: OllamaCloud.keyPath))
+        let url = OllamaCloud.connectURL(for: key, deviceName: OllamaCloud.deviceName)
+        onLoginURL(url)
+        _ = try? await CommandRunner.run(URL(filePath: "/usr/bin/open"), [url.absoluteString], timeout: 10)
+        let deadline = Date().addingTimeInterval(loginTimeout)
+        while Date() < deadline {
+            try await Task.sleep(for: .seconds(3))
+            if let identity = try? await OllamaCloud.whoami(key) {
+                return identity
+            }
+        }
+        throw CommandError.timedOut
     }
 
     private static func signInCodex(executable: URL, home: URL, onOutput: @escaping @Sendable (String) -> Void) async throws -> AccountIdentity {
