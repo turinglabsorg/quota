@@ -373,14 +373,14 @@ private func hex(_ string: String) -> Data {
         let theirSeed = try #require(OpenSSHKey.seed(from: String(contentsOf: theirs, encoding: .utf8)))
         let theirKey = try #require(OllamaKey(seed: theirSeed))
         let publicLine = try String(contentsOf: theirs.appendingPathExtension("pub"), encoding: .utf8)
-        #expect(publicLine.split(separator: " ").prefix(2).joined(separator: " ") == theirKey.authorizedKey)
+        #expect(publicLine.split(whereSeparator: \.isWhitespace).prefix(2).joined(separator: " ") == theirKey.authorizedKey)
 
         let mine = directory.appending(path: "mine")
         let key = try #require(OllamaKey(seed: seed))
         try OpenSSHKey.text(for: key).write(to: mine, atomically: true, encoding: .utf8)
         try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: mine.path)
         let derived = try sshKeygen(["-y", "-f", mine.path])
-        #expect(derived.split(separator: " ").prefix(2).joined(separator: " ") == key.authorizedKey)
+        #expect(derived.split(whereSeparator: \.isWhitespace).prefix(2).joined(separator: " ") == key.authorizedKey)
     }
 
     @Test func mapsTheMonthlyPool() throws {
