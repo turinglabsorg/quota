@@ -17,6 +17,7 @@ Inspired by the usage readout in [Orca](https://github.com/stablyai/orca), packa
 - **Popover**: every window (5-hour session, weekly, model-scoped weekly, monthly) with a bar and a reset countdown.
 - **You choose the accounts**: reuse the login of a CLI already on your Mac, or sign in to a different account in the browser. New sign-ins are kept separate from your CLI sessions, so you can monitor several accounts per service.
 - **Settings**: show remaining or used percentage, add accounts, launch at login.
+- **iPhone**: [Quota iOS](https://github.com/turinglabsorg/quota-ios), an app with Home Screen and Lock Screen widgets, fed by `quota-server` on an always-on Mac (see below).
 - **Native and light**: AppKit + SwiftUI, no Electron, no background services, no telemetry.
 - **Localized**: English and Italian.
 
@@ -77,6 +78,27 @@ Ollama documents `/api/balance`; the other endpoints are the ones the official C
 - Shared CLI logins stay where each CLI keeps them.
 - Ollama Cloud accounts signed in through Quota are a device key in their isolated folder, linked to your account on ollama.com; unlinking the account also removes the key from ollama.com.
 
+## iPhone app and widgets
+
+Your iPhone has no CLIs to read limits from, so an always-on Mac does it: `quota-server` reads the accounts linked on that Mac every 5 minutes and publishes them over HTTPS for the Quota iOS app and its Home Screen and Lock Screen widgets. The phone only ever receives usage numbers, never credentials.
+
+On the always-on Mac (macOS 12.3 or later, Intel or Apple silicon):
+
+```bash
+scripts/build-server.sh                       # on your development Mac: build/server/quota-server
+quota-server detect                           # CLI logins found on this Mac
+quota-server link claude                      # link the logins you want (claude, codex, grok, ollama)
+quota-server serve --port 4310                # listens on localhost only
+```
+
+Put it behind any HTTPS reverse proxy you already use (Caddy, Tailscale Serve, a tunnel), then pair the phone:
+
+```bash
+quota-server pair                             # prints a single-use code, valid 10 minutes
+```
+
+Install the iOS app from [Quota iOS](https://github.com/turinglabsorg/quota-ios), open it, enter your server address and the code. `quota-server devices` and `quota-server revoke <id>` manage paired devices.
+
 ## Development
 
 ```bash
@@ -84,6 +106,7 @@ scripts/test.sh                                   # unit tests (Swift Testing)
 scripts/build-app.sh                              # build build/Quota.app
 build/Quota.app/Contents/MacOS/Quota --print      # print usage for linked accounts
 .build/debug/Quota --render-preview /tmp/quota    # render UI previews with sample data
+scripts/build-server.sh                           # build build/server/quota-server (macOS 12.3+)
 ```
 
 Set `QUOTA_DEBUG=1` to log failed HTTP responses (status and body, never tokens) to stderr, or `QUOTA_DEBUG=verbose` to log every usage response.

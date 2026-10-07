@@ -1,4 +1,6 @@
+#if canImport(QuotaCore)
 import QuotaCore
+#endif
 import SwiftUI
 
 struct ProviderGlyph: View {

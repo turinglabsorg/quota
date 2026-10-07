@@ -4,7 +4,7 @@ import Foundation
 // Uses /usr/bin/security, the same tool Claude Code uses, so items it created are readable without extra prompts.
 enum Keychain {
     static let claudeService = "Claude Code-credentials"
-    private static let security = URL(filePath: "/usr/bin/security")
+    private static let security = URL(fileURLWithPath: "/usr/bin/security")
 
     static var accountName: String {
         let user = NSUserName()

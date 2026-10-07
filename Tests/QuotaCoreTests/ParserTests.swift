@@ -477,3 +477,32 @@ struct OllamaCloudLiveTests {
         print("Ollama Cloud: \(snapshot.account ?? "?") (\(snapshot.plan ?? "no plan")): \(windows)")
     }
 }
+
+@Suite struct UsagePayloadTests {
+    @Test func roundTripsEveryWindowKind() throws {
+        let account = Account(provider: .claude, source: .managed, email: "me@example.com", plan: "Max 5x")
+        let reset = Date(timeIntervalSince1970: 1_800_000_000)
+        let snapshot = ProviderSnapshot(provider: .claude, plan: "Max 5x", account: "me@example.com", windows: [
+            UsageWindow(kind: .session, usedPercent: 12.5, resetsAt: reset),
+            UsageWindow(kind: .weekly, usedPercent: 40, resetsAt: nil),
+            UsageWindow(kind: .weeklyModel("Fable"), usedPercent: 90, resetsAt: reset),
+            UsageWindow(kind: .monthly, usedPercent: 3, resetsAt: reset),
+            UsageWindow(kind: .custom(minutes: 60), usedPercent: 7, resetsAt: nil),
+        ], fetchedAt: reset)
+        let payload = UsagePayload(generatedAt: reset, refreshedAt: reset, accounts: [
+            AccountUsage(account: account, snapshot: snapshot, issue: .rateLimited),
+        ])
+        let decoded = try UsagePayload.decode(UsagePayload.encode(payload))
+        #expect(decoded == payload)
+        #expect(decoded.accounts[0].usageWindows == snapshot.windows)
+        #expect(decoded.accounts[0].snapshot == snapshot)
+        #expect(decoded.accounts[0].issue?.kind == "rateLimited")
+    }
+
+    @Test func skipsWindowKindsFromNewerServers() throws {
+        let json = #"{"version":1,"generatedAt":"2026-10-07T00:00:00Z","accounts":[{"id":"6F1A2C9E-3B7D-4E58-9A10-1B2C3D4E5F60","provider":"codex","source":"cli","windows":[{"kind":"daily","usedPercent":5},{"kind":"weekly","usedPercent":10}]}]}"#
+        let payload = try UsagePayload.decode(Data(json.utf8))
+        #expect(payload.accounts[0].usageWindows.map(\.kind) == [.weekly])
+        #expect(payload.accounts[0].snapshot == nil)
+    }
+}

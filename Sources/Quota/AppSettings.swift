@@ -1,4 +1,5 @@
 import Foundation
+import QuotaCore
 import ServiceManagement
 
 @MainActor
@@ -29,13 +30,13 @@ final class AppSettings: ObservableObject {
     }
 
     @Published var displayMode: DisplayMode {
-        didSet { Storage.defaults.set(displayMode.rawValue, forKey: Keys.displayMode) }
+        didSet { AccountStorage.defaults.set(displayMode.rawValue, forKey: Keys.displayMode) }
     }
     @Published private(set) var launchAtLogin: Bool
     @Published private(set) var loginItemError: String?
 
     init() {
-        displayMode = DisplayMode(rawValue: Storage.defaults.string(forKey: Keys.displayMode) ?? "") ?? .remaining
+        displayMode = DisplayMode(rawValue: AccountStorage.defaults.string(forKey: Keys.displayMode) ?? "") ?? .remaining
         launchAtLogin = SMAppService.mainApp.status == .enabled
     }
 

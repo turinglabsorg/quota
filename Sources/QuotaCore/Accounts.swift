@@ -82,7 +82,7 @@ public enum AccountLinker {
                 _ = try? await CommandRunner.run(executable, ["logout"], environment: ["GROK_HOME": home.path], timeout: 30)
             }
         case .ollama:
-            if let key = OllamaCloud.readKey(at: home.appending(path: OllamaCloud.keyPath)) {
+            if let key = OllamaCloud.readKey(at: home.appendingPathComponent(OllamaCloud.keyPath)) {
                 await OllamaCloud.disconnect(key)
             }
         }
@@ -99,13 +99,13 @@ public enum AccountLinker {
 
     // Like `ollama signin`: a new device key, linked on ollama.com to the account the user signs in to.
     private static func signInOllama(home: URL, onLoginURL: @escaping @Sendable (URL) -> Void) async throws -> AccountIdentity {
-        let key = try OllamaCloud.createKey(at: home.appending(path: OllamaCloud.keyPath))
+        let key = try OllamaCloud.createKey(at: home.appendingPathComponent(OllamaCloud.keyPath))
         let url = OllamaCloud.connectURL(for: key, deviceName: OllamaCloud.deviceName)
         onLoginURL(url)
-        _ = try? await CommandRunner.run(URL(filePath: "/usr/bin/open"), [url.absoluteString], timeout: 10)
+        _ = try? await CommandRunner.run(URL(fileURLWithPath: "/usr/bin/open"), [url.absoluteString], timeout: 10)
         let deadline = Date().addingTimeInterval(loginTimeout)
         while Date() < deadline {
-            try await Task.sleep(for: .seconds(3))
+            try await Task.sleep(nanoseconds: 3_000_000_000)
             if let identity = try? await OllamaCloud.whoami(key) {
                 return identity
             }
@@ -126,7 +126,7 @@ public enum AccountLinker {
     private static func signInGrok(executable: URL, home: URL, onOutput: @escaping @Sendable (String) -> Void) async throws -> AccountIdentity {
         // Grok's login expects a terminal; `script` provides a pseudo-terminal.
         let login = try await CommandRunner.run(
-            URL(filePath: "/usr/bin/script"),
+            URL(fileURLWithPath: "/usr/bin/script"),
             ["-q", "/dev/null", executable.path, "login", "--oauth"],
             environment: ["GROK_HOME": home.path],
             timeout: loginTimeout,

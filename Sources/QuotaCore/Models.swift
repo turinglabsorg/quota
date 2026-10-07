@@ -80,11 +80,11 @@ public struct AccountIdentity: Equatable, Sendable {
 
 public enum AccountPaths {
     public static var root: URL {
-        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appending(path: "Quota/Accounts")
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0].appendingPathComponent("Quota/Accounts")
     }
 
     public static func home(provider: Provider, id: UUID) -> URL {
-        root.appending(path: provider.rawValue).appending(path: id.uuidString)
+        root.appendingPathComponent(provider.rawValue).appendingPathComponent(id.uuidString)
     }
 }
 

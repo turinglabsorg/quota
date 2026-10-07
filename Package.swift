@@ -7,7 +7,9 @@ let package = Package(
     targets: [
         .target(name: "QuotaCore"),
         .executableTarget(name: "Quota", dependencies: ["QuotaCore"]),
+        .executableTarget(name: "QuotaServer", dependencies: ["QuotaCore"]),
         .testTarget(name: "QuotaCoreTests", dependencies: ["QuotaCore"]),
+        .testTarget(name: "QuotaServerTests", dependencies: ["QuotaServer"]),
     ],
     swiftLanguageModes: [.v5]
 )

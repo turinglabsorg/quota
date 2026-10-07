@@ -83,10 +83,10 @@ private final class CommandJob: @unchecked Sendable {
         lock.unlock()
 
         process.terminationHandler = { [self] process in
-            lock.withLock { exitStatus = process.terminationStatus }
+            lock.locked { exitStatus = process.terminationStatus }
             completeIfDrained()
             DispatchQueue.global().asyncAfter(deadline: .now() + 1) { [self] in
-                let status = lock.withLock { exitStatus }
+                let status = lock.locked { exitStatus }
                 if let status { finish(.success(status)) }
             }
         }
@@ -107,7 +107,7 @@ private final class CommandJob: @unchecked Sendable {
     }
 
     func cancel() {
-        lock.withLock { cancelled = true }
+        lock.locked { cancelled = true }
         finish(.failure(CancellationError()))
     }
 
@@ -117,16 +117,16 @@ private final class CommandJob: @unchecked Sendable {
             while true {
                 let chunk = handle.availableData
                 if chunk.isEmpty { break }
-                if keep { lock.withLock { stdout.append(chunk) } }
+                if keep { lock.locked { stdout.append(chunk) } }
                 onOutput?(String(decoding: chunk, as: UTF8.self))
             }
-            lock.withLock { openStreams -= 1 }
+            lock.locked { openStreams -= 1 }
             completeIfDrained()
         }
     }
 
     private func completeIfDrained() {
-        let status: Int32? = lock.withLock { openStreams == 0 ? exitStatus : nil }
+        let status: Int32? = lock.locked { openStreams == 0 ? exitStatus : nil }
         if let status { finish(.success(status)) }
     }
 
@@ -163,14 +163,14 @@ enum CLI {
         ]
         var found = directories.map { "\($0)/\(name)" }
             .first(where: FileManager.default.isExecutableFile(atPath:))
-            .map { URL(filePath: $0) }
+            .map { URL(fileURLWithPath: $0) }
         if found == nil {
             let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-            if let result = try? await CommandRunner.run(URL(filePath: shell), ["-lc", "command -v \(name)"], timeout: 10),
+            if let result = try? await CommandRunner.run(URL(fileURLWithPath: shell), ["-lc", "command -v \(name)"], timeout: 10),
                result.status == 0,
                let path = result.stdout.split(separator: "\n").last.map({ String($0).trimmingCharacters(in: .whitespaces) }),
                FileManager.default.isExecutableFile(atPath: path) {
-                found = URL(filePath: path)
+                found = URL(fileURLWithPath: path)
             }
         }
         if let found { cache.set(name, found) }
@@ -182,6 +182,6 @@ private final class ExecutableCache: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [String: URL] = [:]
 
-    func get(_ key: String) -> URL? { lock.withLock { values[key] } }
-    func set(_ key: String, _ value: URL) { lock.withLock { values[key] = value } }
+    func get(_ key: String) -> URL? { lock.locked { values[key] } }
+    func set(_ key: String, _ value: URL) { lock.locked { values[key] = value } }
 }

@@ -200,7 +200,7 @@ struct ManagedClaudeCredentials {
     let home: URL
 
     var service: String { Keychain.scopedClaudeService(configDirectory: home) }
-    private var file: URL { home.appending(path: ".credentials.json") }
+    private var file: URL { home.appendingPathComponent(".credentials.json") }
 
     func read() async -> Data? {
         if let data = await Keychain.read(service: service) { return data }
@@ -224,7 +224,7 @@ enum SharedClaudeLogin {
 
     static func read() async -> ClaudeCredentials? {
         let stored = await Keychain.read(service: Keychain.claudeService)
-            ?? (try? Data(contentsOf: LocalFiles.home.appending(path: ".claude/.credentials.json")))
+            ?? (try? Data(contentsOf: LocalFiles.home.appendingPathComponent(".claude/.credentials.json")))
         return stored.flatMap(ClaudeParser.credentials)
     }
 
@@ -233,7 +233,7 @@ enum SharedClaudeLogin {
             guard let executable = await CLI.locate(.claude) else { return nil }
             let session = Task {
                 _ = try? await CommandRunner.run(
-                    URL(filePath: "/usr/bin/script"),
+                    URL(fileURLWithPath: "/usr/bin/script"),
                     ["-q", "/dev/null", executable.path],
                     environment: ["CLAUDE_CONFIG_DIR": nil],
                     timeout: 45,
@@ -242,7 +242,7 @@ enum SharedClaudeLogin {
             }
             defer { session.cancel() }
             for _ in 0..<30 {
-                try? await Task.sleep(for: .seconds(1))
+                try? await Task.sleep(nanoseconds: 1_000_000_000)
                 if let credentials = await read(), credentials.accessToken != token, !credentials.isExpiring(at: Date()) {
                     return credentials
                 }

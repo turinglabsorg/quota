@@ -107,16 +107,16 @@ private final class CodexRPCSession: @unchecked Sendable {
             }
             guard methods.indices.contains(id - 1) else { continue }
             let method = methods[id - 1]
-            lock.withLock {
+            lock.locked {
                 if let error = JSON.dict(message["error"]) {
                     response.errors[method] = JSON.string(error["message"]) ?? "error"
                 } else if let result = message["result"], let data = try? JSONSerialization.data(withJSONObject: result) {
                     response.results[method] = data
                 }
             }
-            let done = lock.withLock { response.results.count + response.errors.count == methods.count }
+            let done = lock.locked { response.results.count + response.errors.count == methods.count }
             if done {
-                finish(.success(lock.withLock { response }))
+                finish(.success(lock.locked { response }))
             }
         }
     }

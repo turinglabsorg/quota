@@ -49,7 +49,7 @@ enum HTTP {
         let debug = ProcessInfo.processInfo.environment["QUOTA_DEBUG"]
         if let debug, debug == "verbose" || !(200..<300).contains(status) {
             let body = String(decoding: data.prefix(debug == "verbose" ? 262_144 : 300), as: UTF8.self)
-            FileHandle.standardError.write(Data("[\(request.url?.host() ?? "")] HTTP \(status) body=\(body)\n".utf8))
+            FileHandle.standardError.write(Data("[\(request.url?.host ?? "")] HTTP \(status) body=\(body)\n".utf8))
         }
         switch status {
         case 200..<300: return data
@@ -64,5 +64,13 @@ enum LoginURL {
         let plain = text.replacingOccurrences(of: "\u{1B}\\[[0-9;?]*[A-Za-z]", with: "", options: .regularExpression)
         guard let range = plain.range(of: #"https://[^\s\u{1B}\u{07}"'<>]+"#, options: .regularExpression) else { return nil }
         return URL(string: String(plain[range]))
+    }
+}
+
+extension NSLock {
+    func locked<T>(_ body: () throws -> T) rethrows -> T {
+        lock()
+        defer { unlock() }
+        return try body()
     }
 }

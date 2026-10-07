@@ -6,7 +6,9 @@ Native macOS menu bar app (Swift, AppKit + SwiftUI, SwiftPM) that shows remainin
 
 - `Sources/QuotaCore`: models, parsers, fetchers, account linking, command/keychain helpers. No UI. Parsers must stay unit-testable with fixture JSON.
 - `Sources/Quota`: the app (status item, popover, account store, link controller, CLI report, preview renderer).
-- `Tests/QuotaCoreTests`: Swift Testing suites.
+- `Sources/QuotaServer`: `quota-server`, a headless server that publishes the usage of the accounts linked on an always-on Mac for the iOS app (HTTP server on Network.framework, usage cache, paired devices, CLI commands).
+- The iOS app and its widgets live in Quota iOS (github.com/turinglabsorg/quota-ios), which includes this repository as a git submodule and compiles `QuotaCore/{Models,Formatting,JSON,UsagePayload}.swift`, `Quota/ProviderGlyph.swift` and `Resources/*.lproj` from it. Changes to those files reach the iOS app when quota-ios bumps the submodule.
+- `Tests/QuotaCoreTests`, `Tests/QuotaServerTests`: Swift Testing suites.
 - `DESIGN.md`: design system. Read it before any UI change and update it when you add patterns.
 
 ## Commands
@@ -16,10 +18,24 @@ Native macOS menu bar app (Swift, AppKit + SwiftUI, SwiftPM) that shows remainin
 - End-to-end check without UI: `~/Applications/Quota.app/Contents/MacOS/Quota --print` (linked accounts, or detected CLI logins when none are linked). `QUOTA_DEBUG=1` logs failed HTTP responses, `QUOTA_DEBUG=verbose` logs every usage response body (never tokens).
 - Render UI previews with sample data: `.build/debug/Quota --render-preview <dir>`. AppKit-backed controls (buttons, menus, spinners) render as placeholders there, except in `readme-*.png`, which use the `isStaticPreview` environment flag. Regenerate `docs/screenshots/readme-{light,dark}.png` from it after visible UI changes.
 - Check a translation live: `build/Quota.app/Contents/MacOS/Quota --print -AppleLanguages '(it)'`.
+- Build `quota-server` (universal, macOS 12.3+): `scripts/build-server.sh` → `build/server/quota-server`.
 
 ## Toolchain gotcha
 
 With the macOS 27 SDK, SwiftUI `@State` is a macro whose plugin is missing from Command Line Tools. Keep view state in `ObservableObject`s (see `PopoverRouter`) instead of `@State`.
+
+## Portability
+
+- `QuotaCore` must compile for macOS 12.3 (`quota-server` runs on older always-on Macs): no macOS 13+ APIs such as `URL(filePath:)`, `appending(path:)`, `appending(queryItems:)`, `URL.host()`, `Task.sleep(for:)` or `NSLock.withLock` (use `locked`). `scripts/build-server.sh` is the check.
+- `Models.swift`, `Formatting.swift`, `JSON.swift`, `UsagePayload.swift` and `ProviderGlyph.swift` are also compiled into the iOS targets of quota-ios: keep them Foundation/SwiftUI-only (no `Process`, Keychain helpers or AppKit), and keep `ProviderGlyph.swift`'s `import QuotaCore` conditional. `Resources/it.lproj/Localizable.strings` also carries the iOS app's strings. `scripts/make-icon.swift <png> --ios` renders the full-bleed iOS icon.
+
+## iPhone: quota-server and the iOS app
+
+- `quota-server serve` listens on the loopback interface only (port from `--port` or `PORT`, default 4310); a reverse proxy publishes it over HTTPS (for example a `grog serve` site with `run: quota-server serve`, Caddy, or Tailscale Serve). It refreshes every 5 minutes like the app and serves cached data.
+- API (version 1, JSON): `GET /health` (no auth), `POST /v1/pair` with `{"code","name"}` → `{"token"}`, `GET /v1/usage` with `Authorization: Bearer <token>` → `UsagePayload` (accounts, windows, issues; never credentials). Unknown window kinds must be skipped by clients.
+- Pairing: `quota-server pair` prints an 8-digit code, valid 10 minutes, single use, burned after 5 wrong attempts. Tokens and codes are stored only as SHA-256 hashes in `~/Library/Application Support/Quota/Server/devices.json` (mode 600, flock-guarded). `quota-server devices` / `revoke <id>` manage paired devices.
+- Accounts are the same `AccountStorage` suite as the app: link them on the server Mac with `quota-server detect`, `link <service>`, `signin ollama`, `unlink <id>`.
+- The iOS app (quota-ios) keeps the device token in the Keychain and the last payload in its App Group; the widgets fetch the server themselves every 15 minutes. Keep the API backward compatible: phones may run an older app.
 
 ## Accounts
 

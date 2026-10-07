@@ -19,15 +19,18 @@ struct Ring: View {
 }
 
 struct Icon: View {
+    // iOS masks the icon itself, so its artwork fills the square edge to edge.
+    let fullBleed: Bool
+
     var body: some View {
         ZStack {
-            RoundedRectangle(cornerRadius: 185, style: .continuous)
+            RoundedRectangle(cornerRadius: fullBleed ? 0 : 185, style: .continuous)
                 .fill(LinearGradient(
                     colors: [Color(red: 0.16, green: 0.155, blue: 0.15), Color(red: 0.07, green: 0.068, blue: 0.065)],
                     startPoint: .top,
                     endPoint: .bottom
                 ))
-                .frame(width: 824, height: 824)
+                .frame(width: fullBleed ? 1024 : 824, height: fullBleed ? 1024 : 824)
             Ring(diameter: 600, fraction: 0.72, color: Color(red: 0.851, green: 0.467, blue: 0.341))
             Ring(diameter: 440, fraction: 0.88, color: Color(red: 0.93, green: 0.92, blue: 0.9))
             Ring(diameter: 280, fraction: 0.4, color: Color(red: 0.6, green: 0.59, blue: 0.57))
@@ -38,7 +41,7 @@ struct Icon: View {
 
 let output = URL(filePath: CommandLine.arguments[1])
 MainActor.assumeIsolated {
-    let renderer = ImageRenderer(content: Icon())
+    let renderer = ImageRenderer(content: Icon(fullBleed: CommandLine.arguments.contains("--ios")))
     renderer.scale = 1
     guard let image = renderer.nsImage,
           let tiff = image.tiffRepresentation,

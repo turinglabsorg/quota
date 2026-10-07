@@ -119,12 +119,12 @@ struct GrokFetcher {
 
     static func home(for account: Account) -> URL {
         account.home
-            ?? ProcessInfo.processInfo.environment["GROK_HOME"].map { URL(filePath: $0) }
-            ?? LocalFiles.home.appending(path: ".grok")
+            ?? ProcessInfo.processInfo.environment["GROK_HOME"].map { URL(fileURLWithPath: $0) }
+            ?? LocalFiles.home.appendingPathComponent(".grok")
     }
 
     static func credentials(home: URL) -> GrokCredentials? {
-        guard let data = try? Data(contentsOf: home.appending(path: "auth.json")) else { return nil }
+        guard let data = try? Data(contentsOf: home.appendingPathComponent("auth.json")) else { return nil }
         return GrokParser.credentials(from: data)
     }
 
@@ -150,7 +150,7 @@ struct GrokFetcher {
         let email = credentials.email ?? account.email
 
         do {
-            let creditsURL = Self.baseURL.appending(queryItems: [URLQueryItem(name: "format", value: "credits")])
+            let creditsURL = URL(string: "\(Self.baseURL.absoluteString)?format=credits")!
             let credits = try await HTTP.get(creditsURL, headers: headers)
             switch try GrokParser.credits(from: credits) {
             case .usage(let plan, let window):

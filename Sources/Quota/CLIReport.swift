@@ -3,7 +3,7 @@ import QuotaCore
 
 enum CLIReport {
     static func run() async {
-        var accounts = Storage.loadAccounts()
+        var accounts = AccountStorage.load()
         if accounts.isEmpty {
             print("No accounts linked in Quota: showing the CLI logins found on this Mac.\n")
             for provider in Provider.allCases {

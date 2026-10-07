@@ -81,7 +81,7 @@ enum OllamaCloud {
     private static let baseURL = URL(string: "https://ollama.com")!
 
     static func keyFile(for account: Account) -> URL {
-        (account.home ?? LocalFiles.home).appending(path: keyPath)
+        (account.home ?? LocalFiles.home).appendingPathComponent(keyPath)
     }
 
     static func readKey(at url: URL) -> OllamaKey? {
@@ -118,7 +118,7 @@ enum OllamaCloud {
     static func signedRequest(_ key: OllamaKey, method: String, path: String) async throws -> Data {
         let timestamp = String(Int(Date().timeIntervalSince1970))
         let authorization = try key.authorization(method: method, path: path, timestamp: timestamp)
-        var components = URLComponents(url: baseURL.appending(path: path), resolvingAgainstBaseURL: false)!
+        var components = URLComponents(url: baseURL.appendingPathComponent(path), resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "ts", value: timestamp)]
         return try await HTTP.send(method: method, url: components.url!, headers: [
             "Authorization": authorization,

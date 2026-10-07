@@ -16,6 +16,8 @@ jobs:
         run: scripts/test.sh
       - name: Build
         run: swift build
+      - name: Build quota-server for macOS 12.3+
+        run: scripts/build-server.sh
       - name: Render previews
         run: .build/debug/Quota --render-preview "$RUNNER_TEMP/previews"
       - uses: actions/upload-artifact@v4

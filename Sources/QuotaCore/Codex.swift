@@ -115,9 +115,9 @@ struct CodexFetcher {
     }
 
     private func fetchFromBackend() async throws -> ProviderSnapshot {
-        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(filePath: $0) }
-            ?? LocalFiles.home.appending(path: ".codex")
-        guard let data = try? Data(contentsOf: home.appending(path: "auth.json")),
+        let home = ProcessInfo.processInfo.environment["CODEX_HOME"].map { URL(fileURLWithPath: $0) }
+            ?? LocalFiles.home.appendingPathComponent(".codex")
+        guard let data = try? Data(contentsOf: home.appendingPathComponent("auth.json")),
               let auth = CodexParser.auth(from: data)
         else {
             throw ProviderIssue.signedOut(String(localized: "Codex is not signed in with ChatGPT. Run `codex login`."))

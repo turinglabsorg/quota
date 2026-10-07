@@ -94,3 +94,21 @@
 "%@: updating" = "%@: in aggiornamento";
 "no data" = "nessun dato";
 "Quota: no linked accounts" = "Quota: nessun account collegato";
+
+/* iOS app and widgets */
+"Pair this device with your Quota server." = "Abbina questo dispositivo al tuo server Quota.";
+"That pairing code is not valid." = "Il codice di abbinamento non è valido.";
+"That pairing code expired. Create a new one." = "Il codice di abbinamento è scaduto. Creane uno nuovo.";
+"This device is no longer paired. Pair it again." = "Questo dispositivo non è più abbinato. Abbinalo di nuovo.";
+"Can't reach the Quota server." = "Impossibile raggiungere il server Quota.";
+"Enter the address of your Quota server." = "Inserisci l'indirizzo del tuo server Quota.";
+"No accounts are linked on the server. Run `quota-server link <service>` on your Mac." = "Nessun account collegato sul server. Esegui `quota-server link <servizio>` sul tuo Mac.";
+"Quota shows the usage that quota-server reads on your Mac. On that Mac, run `quota-server pair` and enter the code here." = "Quota mostra l'utilizzo che quota-server legge sul tuo Mac. Su quel Mac esegui `quota-server pair` e inserisci qui il codice.";
+"Server" = "Server";
+"Pairing code" = "Codice di abbinamento";
+"Pair" = "Abbina";
+"Unpair this device" = "Scollega questo dispositivo";
+"Done" = "Fine";
+"Open Quota to pair" = "Apri Quota per abbinare";
+"How much of your Claude, Codex, Grok and Ollama Cloud limits you have left." = "Quanto ti resta dei limiti di Claude, Codex, Grok e Ollama Cloud.";
+"Couldn't save the pairing on this device." = "Impossibile salvare l'abbinamento su questo dispositivo.";
