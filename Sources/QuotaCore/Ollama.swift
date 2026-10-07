@@ -41,17 +41,25 @@ public struct OllamaKey: Equatable, Sendable {
 }
 
 public enum OllamaParser {
-    /// `limits.<window>.usage` is the used fraction (0–1) of the plan. Ollama sends no reset times.
-    /// Plans since August 2026 report a monthly credit pool; legacy Pro/Max plans report a 5-hour
-    /// session and a weekly window instead.
+    /// `GET /api/balance` (ollama/ollama docs/api/balance.mdx). Current plans report the included monthly
+    /// allowance in USD (`balance_usd` left of `allowance_usd`, resetting at `period.until`); legacy plans
+    /// report `session` and `weekly` windows with `remaining_percent` (0–100) and `resets_at`.
     public static func usage(from data: Data) throws -> [UsageWindow] {
         let root = fields(try JSON.object(data))
-        guard let limits = JSON.dict(root["limits"]).map(fields) else { throw ProviderIssue.invalidResponse }
-        let kinds: [(key: String, kind: UsageWindow.Kind)] = [("session", .session), ("weekly", .weekly), ("monthly", .monthly)]
-        return kinds.compactMap { slot in
-            guard let usage = JSON.number(JSON.dict(limits[slot.key]).map(fields)?["usage"]), (0...1).contains(usage) else { return nil }
-            return UsageWindow(kind: slot.kind, usedPercent: usage * 100, resetsAt: nil)
+        guard let included = JSON.dict(root["included"]).map(fields) else { throw ProviderIssue.invalidResponse }
+        var windows: [UsageWindow] = []
+        for (key, kind) in [("session", UsageWindow.Kind.session), ("weekly", .weekly)] {
+            guard let window = JSON.dict(included[key]).map(fields),
+                  let remaining = JSON.number(window["remaining_percent"]), (0...100).contains(remaining)
+            else { continue }
+            windows.append(UsageWindow(kind: kind, usedPercent: 100 - remaining, resetsAt: Timestamp.date(window["resets_at"])))
         }
+        if let allowance = JSON.number(included["allowance_usd"]), allowance > 0,
+           let balance = JSON.number(included["balance_usd"]) {
+            let period = JSON.dict(included["period"]).map(fields)
+            windows.append(UsageWindow(kind: .monthly, usedPercent: (allowance - balance) * 100 / allowance, resetsAt: Timestamp.date(period?["until"])))
+        }
+        return windows
     }
 
     /// nil for a key that is not linked: ollama.com then answers with an empty user.
@@ -142,7 +150,7 @@ struct OllamaFetcher {
         guard let key = OllamaCloud.readKey(at: OllamaCloud.keyFile(for: account)) else { throw signedOut }
         let data: Data
         do {
-            data = try await OllamaCloud.signedRequest(key, method: "GET", path: "/api/usage")
+            data = try await OllamaCloud.signedRequest(key, method: "GET", path: "/api/balance")
         } catch ProviderIssue.http(let status) where status == 401 || status == 403 {
             throw signedOut
         }

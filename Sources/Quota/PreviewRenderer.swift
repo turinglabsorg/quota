@@ -98,7 +98,7 @@ enum PreviewRenderer {
                 UsageWindow(kind: .weekly, usedPercent: 96, resetsAt: now.addingTimeInterval(3 * 86_400 + 9 * 3_600)),
             ])),
             ollama.id: UsageStore.Entry(snapshot: ProviderSnapshot(provider: .ollama, plan: "Max", account: ollama.email, windows: [
-                UsageWindow(kind: .monthly, usedPercent: 43, resetsAt: nil),
+                UsageWindow(kind: .monthly, usedPercent: 43, resetsAt: now.addingTimeInterval(13 * 86_400 + 4 * 3_600)),
             ])),
         ]
     }

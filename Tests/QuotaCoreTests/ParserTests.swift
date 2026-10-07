@@ -400,22 +400,41 @@ private func hex(_ string: String) -> Data {
         #expect(derived.split(whereSeparator: \.isWhitespace).prefix(2).joined(separator: " ") == key.authorizedKey)
     }
 
-    @Test func mapsTheMonthlyPool() throws {
+    @Test func mapsTheIncludedMonthlyAllowance() throws {
         let windows = try OllamaParser.usage(from: json("""
         {
-          "activity": { "cost": "0.00000", "period": { "type": "last_4_weeks" }, "models": [] },
-          "limits": { "monthly": { "usage": 0.445, "models": [ { "name": "kimi-k3", "request_count": 1683 } ] } }
+          "included": {
+            "balance_usd": 72.5,
+            "allowance_usd": 100,
+            "period": { "from": "2026-09-15T09:30:00Z", "until": "2026-10-15T09:30:00Z" }
+          },
+          "purchased": { "balance_usd": 25 }
         }
         """))
-        #expect(windows == [UsageWindow(kind: .monthly, usedPercent: 44.5, resetsAt: nil)])
-        #expect(windows[0].remainingPercent(at: Date()) == 55)
+        #expect(windows == [UsageWindow(kind: .monthly, usedPercent: 27.5, resetsAt: Timestamp.iso("2026-10-15T09:30:00Z"))])
+        #expect(windows[0].remainingPercent(at: Timestamp.iso("2026-10-01T00:00:00Z")!) == 72)
     }
 
-    @Test func mapsLegacyWindowsAndIgnoresInvalidFractions() throws {
-        let windows = try OllamaParser.usage(from: json(#"{ "Limits": { "Session": { "Usage": 0.067 }, "weekly": { "usage": 1.7 } } }"#))
-        #expect(windows.map(\.kind) == [.session])
-        #expect(try OllamaParser.usage(from: json(#"{ "limits": {} }"#)).isEmpty)
-        #expect(throws: ProviderIssue.invalidResponse) { try OllamaParser.usage(from: json(#"{ "error": "invalid credentials" }"#)) }
+    @Test func mapsLegacySessionAndWeeklyWindows() throws {
+        let windows = try OllamaParser.usage(from: json("""
+        {
+          "included": {
+            "session": { "remaining_percent": 75, "resets_at": "2026-10-01T07:00:00Z" },
+            "weekly": { "remaining_percent": 40, "resets_at": "2026-10-05T00:00:00Z" }
+          },
+          "purchased": { "balance_usd": 25 }
+        }
+        """))
+        #expect(windows == [
+            UsageWindow(kind: .session, usedPercent: 25, resetsAt: Timestamp.iso("2026-10-01T07:00:00Z")),
+            UsageWindow(kind: .weekly, usedPercent: 60, resetsAt: Timestamp.iso("2026-10-05T00:00:00Z")),
+        ])
+    }
+
+    @Test func ignoresInvalidBalances() throws {
+        #expect(try OllamaParser.usage(from: json(#"{ "Included": { "Session": { "Remaining_Percent": 140 }, "allowance_usd": 0, "balance_usd": 5 } }"#)).isEmpty)
+        #expect(try OllamaParser.usage(from: json(#"{ "included": {}, "purchased": { "balance_usd": 25 } }"#)).isEmpty)
+        #expect(throws: ProviderIssue.invalidResponse) { try OllamaParser.usage(from: json(#"{ "error": "unauthorized" }"#)) }
     }
 
     @Test func treatsAnEmptyUserAsNotLinked() {
@@ -443,5 +462,18 @@ struct SharedClaudeLoginLiveTests {
         let current = try #require(await SharedClaudeLogin.read())
         let renewed = try #require(await SharedClaudeLogin.renew(replacing: "stale-\(UUID().uuidString)"))
         #expect(renewed.accessToken == current.accessToken || !renewed.isExpiring(at: Date()))
+    }
+}
+
+// Live check against ollama.com with the device key `ollama signin` linked; run with QUOTA_LIVE_TESTS=1 scripts/test.sh.
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["QUOTA_LIVE_TESTS"] != nil))
+struct OllamaCloudLiveTests {
+    @Test func readsUsageForTheSignedInDevice() async throws {
+        let identity = try #require(await AccountLinker.detectCLILogin(.ollama), "Ollama is not signed in on this Mac")
+        let account = Account(provider: .ollama, source: .cli, email: identity.email, plan: identity.plan)
+        let snapshot = try await UsageFetchers.fetch(account)
+        #expect(!snapshot.windows.isEmpty)
+        let windows = snapshot.windows.map { "\($0.label) \(Int($0.usedPercent.rounded()))% used" }.joined(separator: ", ")
+        print("Ollama Cloud: \(snapshot.account ?? "?") (\(snapshot.plan ?? "no plan")): \(windows)")
     }
 }
