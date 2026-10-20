@@ -18,6 +18,7 @@ final class UsageStore: ObservableObject {
     private var refreshTimer: Timer?
     private var resetTimer: Timer?
     private var needsAnotherRefresh = false
+    private var isWakingMuse = false
     private var cancellables = Set<AnyCancellable>()
 
     init(accounts: AccountStore, entries: [UUID: Entry] = [:]) {
@@ -26,7 +27,7 @@ final class UsageStore: ObservableObject {
     }
 
     func start() {
-        refresh()
+        refresh(wakeIdleMuse: true)
         refreshTimer = Timer.scheduledTimer(withTimeInterval: refreshInterval, repeats: true) { [weak self] _ in
             MainActor.assumeIsolated { self?.refresh() }
         }
@@ -44,11 +45,32 @@ final class UsageStore: ObservableObject {
     }
 
     func refreshIfStale() {
-        if let lastRefresh, Date().timeIntervalSince(lastRefresh) < 60 { return }
-        refresh()
+        if let lastRefresh, Date().timeIntervalSince(lastRefresh) < refreshInterval {
+            wakeMuseIfIdle()
+            return
+        }
+        refresh(wakeIdleMuse: true)
     }
 
     func refresh() {
+        refresh(wakeIdleMuse: false)
+    }
+
+    private func wakeMuseIfIdle() {
+        guard !isRefreshing, !isWakingMuse,
+              let account = accounts.accounts.first(where: { $0.provider == .musecode }),
+              !(entries[account.id]?.snapshot?.windows.contains(where: { $0.kind == .session && ($0.resetsAt.map { $0 > Date() } ?? false) }) ?? false)
+        else { return }
+        isWakingMuse = true
+        Task {
+            defer { isWakingMuse = false }
+            do { apply(.success(try await UsageFetchers.fetch(account, wakeIdleMuse: true)), to: account) }
+            catch let issue as ProviderIssue { apply(.failure(issue), to: account) }
+            catch { apply(.failure(.network), to: account) }
+        }
+    }
+
+    private func refresh(wakeIdleMuse: Bool) {
         guard !isRefreshing else {
             needsAnotherRefresh = true
             return
@@ -62,7 +84,7 @@ final class UsageStore: ObservableObject {
                 for account in current {
                     group.addTask {
                         do {
-                            return (account, .success(try await UsageFetchers.fetch(account)))
+                            return (account, .success(try await UsageFetchers.fetch(account, wakeIdleMuse: wakeIdleMuse)))
                         } catch let issue as ProviderIssue {
                             return (account, .failure(issue))
                         } catch {
@@ -88,7 +110,13 @@ final class UsageStore: ObservableObject {
         guard accounts.accounts.contains(where: { $0.id == account.id }) else { return }
         switch result {
         case .success(let snapshot):
-            entries[account.id] = Entry(snapshot: snapshot, issue: nil)
+            var shown = snapshot
+            if snapshot.windows.isEmpty, snapshot.issue?.keepsLastSnapshot == true,
+               let previous = entries[account.id]?.snapshot, !previous.windows.isEmpty {
+                shown.windows = previous.windows
+                shown.fetchedAt = previous.fetchedAt
+            }
+            entries[account.id] = Entry(snapshot: shown, issue: snapshot.issue)
             accounts.updateIdentity(id: account.id, email: snapshot.account, plan: snapshot.plan)
         case .failure(let issue):
             let previous = issue.keepsLastSnapshot ? entries[account.id]?.snapshot : nil
@@ -101,8 +129,11 @@ final class UsageStore: ObservableObject {
         let now = Date()
         let nextReset = entries.values
             .compactMap(\.snapshot)
-            .flatMap(\.windows)
-            .compactMap(\.resetsAt)
+            .flatMap { snapshot in
+                snapshot.windows.compactMap(\.resetsAt)
+                    + snapshot.tokenUsage.compactMap(\.resetsAt)
+                    + (snapshot.resetCredits?.credits.compactMap(\.expiresAt) ?? [])
+            }
             .filter { $0 > now }
             .min()
         guard let nextReset, nextReset.timeIntervalSince(now) < refreshInterval else { return }

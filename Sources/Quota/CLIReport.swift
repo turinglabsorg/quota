@@ -18,10 +18,10 @@ enum CLIReport {
             do {
                 let snapshot = try await UsageFetchers.fetch(account)
                 print(snapshot.plan.map { "\(title) (\($0))" } ?? title)
-                for window in snapshot.windows {
-                    let reset = window.resetsAt.map { ", resets in \(Formatting.countdown(to: $0, from: now))" } ?? ""
-                    print("  \(window.label): \(window.remainingPercent(at: now))% left\(reset)")
+                for line in snapshot.reportLines(at: now) {
+                    print(line)
                 }
+                if let issue = snapshot.issue { print("  \(issue.message)") }
             } catch let issue as ProviderIssue {
                 print("\(title): \(issue.message)")
             } catch {

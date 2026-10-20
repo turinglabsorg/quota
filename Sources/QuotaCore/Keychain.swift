@@ -22,11 +22,19 @@ enum Keychain {
             ["find-generic-password", "-s", service, "-w"],
         ]
         for arguments in attempts {
-            guard let result = try? await CommandRunner.run(security, arguments, timeout: 60), result.status == 0 else { continue }
-            let text = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-            if !text.isEmpty { return decode(text) }
+            if let data = await read(arguments) { return data }
         }
         return nil
+    }
+
+    static func read(service: String, account: String) async -> Data? {
+        await read(["find-generic-password", "-a", account, "-s", service, "-w"])
+    }
+
+    private static func read(_ arguments: [String]) async -> Data? {
+        guard let result = try? await CommandRunner.run(security, arguments, timeout: 60), result.status == 0 else { return nil }
+        let text = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
+        return text.isEmpty ? nil : decode(text)
     }
 
     @discardableResult

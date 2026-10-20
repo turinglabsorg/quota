@@ -18,8 +18,9 @@ struct StatusLabelItem: Identifiable, Equatable {
     }
 
     static func items(accounts: [Account], entries: [UUID: UsageStore.Entry], displayMode: AppSettings.DisplayMode, now: Date) -> [StatusLabelItem] {
-        accounts.compactMap { account in
-            guard let entry = entries[account.id], let windows = entry.snapshot?.menuBarWindows(at: now), !windows.isEmpty else { return nil }
+        accounts.map { account in
+            let entry = entries[account.id]
+            let windows = entry?.snapshot?.menuBarWindows(at: now) ?? []
             return StatusLabelItem(
                 id: account.id,
                 provider: account.provider,
@@ -27,7 +28,7 @@ struct StatusLabelItem: Identifiable, Equatable {
                     let remaining = window.remainingPercent(at: now)
                     return Value(percent: displayMode.value(remaining: remaining), level: UsageLevel(remainingPercent: remaining))
                 },
-                isStale: entry.issue != nil
+                isStale: entry?.issue != nil || windows.isEmpty
             )
         }
     }
@@ -62,6 +63,10 @@ struct StatusLabelView: View {
                             .font(.system(size: 12, weight: .medium))
                             .monospacedDigit()
                             .foregroundStyle(value.level.menuBarColor)
+                    } else {
+                        Text(verbatim: "—")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
                     }
                 }
                 .opacity(item.isStale ? 0.55 : 1)

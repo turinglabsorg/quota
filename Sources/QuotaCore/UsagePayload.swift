@@ -49,7 +49,7 @@ public struct AccountUsage: Codable, Equatable, Sendable, Identifiable {
         plan = snapshot?.plan ?? account.plan
         fetchedAt = snapshot?.fetchedAt
         windows = snapshot?.windows.map(WindowUsage.init) ?? []
-        self.issue = issue.map(IssueUsage.init)
+        self.issue = (issue ?? snapshot?.issue).map(IssueUsage.init)
     }
 
     /// The windows this client understands; unknown kinds from a newer server are skipped.
@@ -120,7 +120,8 @@ extension ProviderIssue {
         case .signedOut: "signedOut"
         case .sessionExpired: "sessionExpired"
         case .noQuota: "noQuota"
-        case .rateLimited: "rateLimited"
+        case .rateLimited, .retryLater: "rateLimited"
+        case .usageUnavailable: "usageUnavailable"
         case .http: "http"
         case .network: "network"
         case .invalidResponse: "invalidResponse"

@@ -16,6 +16,7 @@ struct ProviderGlyph: View {
                 case .codex: CodexPrompt().stroke(style: style)
                 case .grok: GrokMark().stroke(style: style)
                 case .ollama: OllamaHead().stroke(style: style)
+                case .musecode: MuseSpark().stroke(style: style)
                 }
             }
             .frame(width: size, height: size)
@@ -29,7 +30,7 @@ extension Provider {
     var accent: Color {
         switch self {
         case .claude: Color(red: 0.851, green: 0.467, blue: 0.341)
-        case .codex, .grok, .ollama: .primary
+        case .codex, .grok, .ollama, .musecode: .primary
         }
     }
 }
@@ -74,6 +75,25 @@ private struct GrokMark: Shape {
         path.addArc(center: center, radius: radius, startAngle: .degrees(-10), endAngle: .degrees(-80), clockwise: false)
         path.move(to: CGPoint(x: center.x - size * 0.44, y: center.y + size * 0.44))
         path.addLine(to: CGPoint(x: center.x + size * 0.44, y: center.y - size * 0.44))
+        return path
+    }
+}
+
+private struct MuseSpark: Shape {
+    func path(in rect: CGRect) -> Path {
+        func point(_ x: Double, _ y: Double) -> CGPoint {
+            CGPoint(x: rect.minX + rect.width * x, y: rect.minY + rect.height * y)
+        }
+        var path = Path()
+        path.move(to: point(0.5, 0.04))
+        path.addLine(to: point(0.6, 0.4))
+        path.addLine(to: point(0.96, 0.5))
+        path.addLine(to: point(0.6, 0.6))
+        path.addLine(to: point(0.5, 0.96))
+        path.addLine(to: point(0.4, 0.6))
+        path.addLine(to: point(0.04, 0.5))
+        path.addLine(to: point(0.4, 0.4))
+        path.closeSubpath()
         return path
     }
 }

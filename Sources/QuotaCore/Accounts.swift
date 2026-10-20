@@ -1,12 +1,13 @@
 import Foundation
 
 public enum UsageFetchers {
-    public static func fetch(_ account: Account) async throws -> ProviderSnapshot {
+    public static func fetch(_ account: Account, wakeIdleMuse: Bool = false) async throws -> ProviderSnapshot {
         switch account.provider {
         case .claude: try await ClaudeFetcher(account: account).fetch()
         case .codex: try await CodexFetcher(account: account).fetch()
         case .grok: try await GrokFetcher(account: account).fetch()
         case .ollama: try await OllamaFetcher(account: account).fetch()
+        case .musecode: try await MuseCodeFetcher(account: account).fetch(wakeIfIdle: wakeIdleMuse)
         }
     }
 }
@@ -25,10 +26,15 @@ public enum AccountLinker {
     public static func detectCLILogin(_ provider: Provider) async -> AccountIdentity? {
         switch provider {
         case .claude:
-            guard let executable = await CLI.locate(.claude),
-                  let status = try? await CommandRunner.run(executable, ["auth", "status", "--json"], environment: ["CLAUDE_CONFIG_DIR": nil], timeout: 30)
-            else { return nil }
-            return ClaudeParser.identity(fromStatus: Data(status.stdout.utf8))
+            if let executable = await CLI.locate(.claude),
+               let status = try? await CommandRunner.run(executable, ["auth", "status", "--json"], environment: ["CLAUDE_CONFIG_DIR": nil], timeout: 30),
+               let identity = ClaudeParser.identity(fromStatus: Data(status.stdout.utf8)) {
+                return identity
+            }
+            // `claude auth status` reports logged out when the Keychain item is blank, even if the
+            // credentials file still holds the session.
+            guard let credentials = await SharedClaudeLogin.read() else { return nil }
+            return AccountIdentity(email: nil, plan: credentials.plan)
         case .codex:
             guard let executable = await CLI.locate(.codex),
                   let response = try? await CodexRPC.call(executable, home: nil, methods: [CodexFetcher.accountMethod]),
@@ -43,6 +49,9 @@ public enum AccountLinker {
             let placeholder = Account(provider: .ollama, source: .cli, email: nil, plan: nil)
             guard let key = OllamaCloud.readKey(at: OllamaCloud.keyFile(for: placeholder)) else { return nil }
             return try? await OllamaCloud.whoami(key)
+        case .musecode:
+            guard await MuseCodeLogin.accessToken() != nil else { return nil }
+            return AccountIdentity(email: MuseCodeLogin.profileEmail(), plan: nil)
         }
     }
 
@@ -58,6 +67,8 @@ public enum AccountLinker {
             case .codex: return try await signInCodex(executable: requireCLI(provider), home: home, onOutput: onOutput)
             case .grok: return try await signInGrok(executable: requireCLI(provider), home: home, onOutput: onOutput)
             case .ollama: return try await signInOllama(home: home, onLoginURL: onLoginURL)
+            case .musecode:
+                throw LinkError(String(localized: "Muse Code has no separate sign-in: link the local login instead."))
             }
         } catch {
             try? FileManager.default.removeItem(at: home)
@@ -85,6 +96,8 @@ public enum AccountLinker {
             if let key = OllamaCloud.readKey(at: home.appendingPathComponent(OllamaCloud.keyPath)) {
                 await OllamaCloud.disconnect(key)
             }
+        case .musecode:
+            break
         }
         try? FileManager.default.removeItem(at: home)
     }

@@ -50,6 +50,26 @@ public enum CodexParser {
         return (planName(planType), sorted(windows))
     }
 
+    /// ChatGPT grants a few rate-limit resets. Codex reports the count, and each credit's expiry when it has one.
+    public static func resetCredits(from data: Data, now: Date = Date()) -> ResetCredits? {
+        guard let root = try? JSON.object(data),
+              let box = JSON.dict(root["rateLimitResetCredits"]) ?? JSON.dict(root["rate_limit_reset_credits"])
+        else { return nil }
+        let reported = JSON.number(box["availableCount"] ?? box["available_count"]).map { Int($0.rounded()) }
+        let credits = (box["credits"] as? [Any] ?? []).compactMap { item -> ResetCredit? in
+            guard let raw = JSON.dict(item) else { return nil }
+            if let status = JSON.string(raw["status"])?.lowercased(), status != "available" { return nil }
+            let expiresAt = Timestamp.date(raw["expiresAt"] ?? raw["expires_at"])
+            if let expiresAt, expiresAt <= now { return nil }
+            let title = JSON.string(raw["title"]) ?? String(localized: "Full reset")
+            let id = JSON.string(raw["id"]) ?? "\(title)-\(expiresAt?.timeIntervalSince1970 ?? 0)"
+            return ResetCredit(id: id, title: title, expiresAt: expiresAt)
+        }.sorted { ($0.expiresAt ?? .distantFuture) < ($1.expiresAt ?? .distantFuture) }
+        let count = max(reported ?? 0, credits.count)
+        guard count > 0 else { return nil }
+        return ResetCredits(availableCount: reported ?? credits.count, credits: credits)
+    }
+
     private static func planLabel(_ value: Any?) -> String? {
         guard let plan = JSON.string(value), plan.lowercased() != "unknown" else { return nil }
         return planName(plan)
@@ -111,7 +131,7 @@ struct CodexFetcher {
         guard let data = response.results[Self.rateLimitsMethod] else { throw ProviderIssue.invalidResponse }
         let identity = response.results[Self.accountMethod].flatMap(CodexParser.identity)
         let usage = try CodexParser.rpcUsage(from: data)
-        return try snapshot(plan: usage.plan ?? identity?.plan, email: identity?.email ?? account.email, windows: usage.windows)
+        return try snapshot(plan: usage.plan ?? identity?.plan, email: identity?.email ?? account.email, windows: usage.windows, credits: CodexParser.resetCredits(from: data))
     }
 
     private func fetchFromBackend() async throws -> ProviderSnapshot {
@@ -140,14 +160,14 @@ struct CodexFetcher {
             throw ProviderIssue.sessionExpired(String(localized: "Session expired. Open Codex to renew it."))
         }
         let usage = try CodexParser.usage(from: response)
-        return try snapshot(plan: usage.plan, email: account.email, windows: usage.windows)
+        return try snapshot(plan: usage.plan, email: account.email, windows: usage.windows, credits: CodexParser.resetCredits(from: response))
     }
 
-    private func snapshot(plan: String?, email: String?, windows: [UsageWindow]) throws -> ProviderSnapshot {
+    private func snapshot(plan: String?, email: String?, windows: [UsageWindow], credits: ResetCredits?) throws -> ProviderSnapshot {
         guard !windows.isEmpty else {
             throw ProviderIssue.noQuota(String(localized: "This account has no subscription limits."))
         }
-        return ProviderSnapshot(provider: .codex, plan: plan, account: email, windows: windows)
+        return ProviderSnapshot(provider: .codex, plan: plan, account: email, windows: windows, resetCredits: credits)
     }
 }
 

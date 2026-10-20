@@ -38,7 +38,10 @@ actor UsageCache {
     }
 
     func payload(now: Date = Date()) -> UsagePayload {
-        let accounts = loadAccounts().map { account in
+        // Installed Quota iOS apps decode `provider` as a closed enum. A `musecode` account in this
+        // payload makes those apps reject the whole response, so it stays on the Mac until quota-ios
+        // learns the provider.
+        let accounts = loadAccounts().filter { $0.provider != .musecode }.map { account in
             AccountUsage(account: account, snapshot: entries[account.id]?.snapshot, issue: entries[account.id]?.issue)
         }
         return UsagePayload(generatedAt: now, refreshedAt: refreshedAt, accounts: accounts)
@@ -68,7 +71,13 @@ actor UsageCache {
         for (id, result) in results {
             switch result {
             case .success(let snapshot):
-                entries[id] = Entry(snapshot: snapshot, issue: nil)
+                var shown = snapshot
+                if snapshot.windows.isEmpty, snapshot.issue?.keepsLastSnapshot == true,
+                   let previous = entries[id]?.snapshot, !previous.windows.isEmpty {
+                    shown.windows = previous.windows
+                    shown.fetchedAt = previous.fetchedAt
+                }
+                entries[id] = Entry(snapshot: shown, issue: snapshot.issue)
             case .failure(let issue):
                 entries[id] = Entry(snapshot: issue.keepsLastSnapshot ? entries[id]?.snapshot : nil, issue: issue)
             }

@@ -117,4 +117,19 @@ private func request(_ method: String, _ path: String, headers: [String: String]
         #expect(payload.accounts.first?.usageWindows == [UsageWindow(kind: .session, usedPercent: 30, resetsAt: Date(timeIntervalSince1970: 1_800_000_000))])
         #expect(!String(decoding: usage.body, as: UTF8.self).contains(token))
     }
+
+    @Test func omitsMuseCodeSoOlderPhonesCanDecode() async throws {
+        let claude = account
+        let muse = Account(provider: .musecode, source: .cli, email: "muse@example.com", plan: "High Usage")
+        let cache = UsageCache(loadAccounts: { [claude, muse] }, fetch: { account in
+            ProviderSnapshot(provider: account.provider, plan: account.plan, account: account.email, windows: [
+                UsageWindow(kind: .session, usedPercent: 5, resetsAt: nil),
+            ])
+        })
+        await cache.refresh()
+        let payload = await cache.payload()
+        #expect(payload.accounts.map(\.provider) == [.claude])
+        let decoded = try UsagePayload.decode(UsagePayload.encode(payload))
+        #expect(decoded.accounts.map(\.provider) == [.claude])
+    }
 }

@@ -5,19 +5,34 @@ import SwiftUI
 // Renders the UI with sample data so the design can be checked without touching real accounts.
 @MainActor
 enum PreviewRenderer {
+    static func renderActivity(history: TokenHistory, to directory: URL) {
+        try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let store = TokenActivityStore()
+        store.history = history
+        store.selectedDay = Calendar.current.startOfDay(for: Date())
+        for scheme in [ColorScheme.light, .dark] {
+            let background = scheme == .dark ? Color(white: 0.16) : Color(white: 0.95)
+            write(TokenActivityView(store: store, onBack: {}).background(background)
+                .environment(\.colorScheme, scheme).environment(\.isStaticPreview, true),
+                to: directory.appendingPathComponent("activity-\(scheme == .dark ? "dark" : "light").png"))
+        }
+    }
+
     private static let claude = Account(provider: .claude, source: .cli, email: "name@example.com", plan: "Team")
     private static let codex = Account(provider: .codex, source: .managed, email: "name@example.com", plan: "Plus")
     private static let grok = Account(provider: .grok, source: .managed, email: "name@example.com", plan: nil)
     private static let ollama = Account(provider: .ollama, source: .managed, email: "name@example.com", plan: "Max")
+    private static let muse = Account(provider: .musecode, source: .cli, email: "name@example.com", plan: "High Usage")
 
     static func render(to directory: URL) {
         try? FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         let now = Date()
         let settings = AppSettings()
-        let accounts = [claude, codex, grok, ollama]
+        let accounts = [claude, codex, grok, ollama, muse]
         let variants: [(name: String, accounts: [Account], entries: [UUID: UsageStore.Entry])] = [
             ("healthy", accounts, healthyEntries(now: now)),
             ("issues", accounts, issueEntries(now: now)),
+            ("no-data", accounts, [:]),
             ("empty", [], [:]),
         ]
         for scheme in [ColorScheme.light, .dark] {
@@ -66,6 +81,27 @@ enum PreviewRenderer {
                 .environment(\.isStaticPreview, true),
                 to: directory.appending(path: "readme-\(suffix).png")
             )
+            let activity = TokenActivityStore()
+            let calendar = Calendar.current
+            let today = calendar.startOfDay(for: now)
+            let weekday = (calendar.component(.weekday, from: today) + 5) % 7
+            let start = calendar.date(byAdding: .day, value: -77 - weekday, to: today)!
+            activity.history = TokenHistory(days: (0..<84).map { index in
+                let day = calendar.date(byAdding: .day, value: index, to: start)!
+                let scale = day > today || index.isMultiple(of: 9) ? 0 : (index * 37 % 17) + 1
+                return TokenActivityDay(date: day, providers: [
+                    .claude: TokenAmounts(input: scale * 140_000, output: scale * 3_000, cached: scale * 100_000),
+                    .codex: TokenAmounts(input: scale * 800_000, output: scale * 12_000, cached: scale * 650_000),
+                    .grok: TokenAmounts(input: scale * 90_000, output: scale * 1_200, cached: scale * 60_000),
+                    .musecode: TokenAmounts(input: scale * 40_000, output: scale * 700, cached: scale * 25_000),
+                ])
+            }, availableProviders: [.claude, .codex, .grok, .musecode])
+            activity.selectedDay = today
+            write(
+                TokenActivityView(store: activity, onBack: {}).background(background)
+                    .environment(\.colorScheme, scheme).environment(\.isStaticPreview, true),
+                to: directory.appendingPathComponent("activity-\(suffix).png")
+            )
             let store = AccountStore(accounts: [claude])
             let linker = LinkController(
                 accounts: store,
@@ -73,6 +109,7 @@ enum PreviewRenderer {
                     .claude: AccountIdentity(email: "name@example.com", plan: "Team"),
                     .codex: AccountIdentity(email: "other@example.com", plan: "Free"),
                     .ollama: AccountIdentity(email: "name@example.com", plan: "Max"),
+                    .musecode: AccountIdentity(email: "name@example.com", plan: "High Usage"),
                 ],
                 signInStates: [.codex: .waiting(URL(string: "https://auth.openai.com/oauth/authorize")), .grok: .failed(String(localized: "\(Provider.grok.displayName) sign-in was not completed."))]
             )
@@ -93,12 +130,23 @@ enum PreviewRenderer {
             codex.id: UsageStore.Entry(snapshot: ProviderSnapshot(provider: .codex, plan: "Plus", account: codex.email, windows: [
                 UsageWindow(kind: .session, usedPercent: 12, resetsAt: now.addingTimeInterval(4 * 3_600 + 90)),
                 UsageWindow(kind: .weekly, usedPercent: 37, resetsAt: now.addingTimeInterval(5 * 86_400 + 13 * 3_600)),
-            ])),
+            ], resetCredits: ResetCredits(availableCount: 3, credits: [
+                ResetCredit(id: "reset-1", title: "Full reset", expiresAt: now.addingTimeInterval(3 * 86_400 + 5 * 3_600)),
+                ResetCredit(id: "reset-2", title: "Full reset", expiresAt: now.addingTimeInterval(10 * 86_400 + 2 * 3_600)),
+                ResetCredit(id: "reset-3", title: "Full reset", expiresAt: now.addingTimeInterval(18 * 86_400 + 7 * 3_600)),
+            ]))),
             grok.id: UsageStore.Entry(snapshot: ProviderSnapshot(provider: .grok, plan: "SuperGrok", account: grok.email, windows: [
                 UsageWindow(kind: .weekly, usedPercent: 96, resetsAt: now.addingTimeInterval(3 * 86_400 + 9 * 3_600)),
             ])),
             ollama.id: UsageStore.Entry(snapshot: ProviderSnapshot(provider: .ollama, plan: "Max", account: ollama.email, windows: [
                 UsageWindow(kind: .monthly, usedPercent: 43, resetsAt: now.addingTimeInterval(13 * 86_400 + 4 * 3_600)),
+            ])),
+            muse.id: UsageStore.Entry(snapshot: ProviderSnapshot(provider: .musecode, plan: "High Usage", account: muse.email, windows: [
+                UsageWindow(kind: .session, usedPercent: 5, resetsAt: now.addingTimeInterval(4 * 3_600 + 50 * 60)),
+                UsageWindow(kind: .weekly, usedPercent: 35, resetsAt: now.addingTimeInterval(4 * 86_400 + 11 * 3_600)),
+            ], tokenUsage: [
+                TokenUsage(period: "today", inputTokens: 812_400, outputTokens: 9_310, cachedTokens: 701_220, cacheWriteTokens: 12_480, reasoningTokens: 1_140, sessions: 2, steps: 18, resetsAt: now.addingTimeInterval(6 * 3_600)),
+                TokenUsage(period: "last7Days", inputTokens: 4_208_150, outputTokens: 51_730, cachedTokens: 3_540_900, cacheWriteTokens: 40_210, reasoningTokens: 6_205, sessions: 9, steps: 96, resetsAt: nil),
             ])),
         ]
     }

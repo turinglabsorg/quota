@@ -115,6 +115,29 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(throws: ProviderIssue.invalidResponse) { try CodexParser.rpcUsage(from: json(#"{ "rateLimits": null }"#)) }
     }
 
+    @Test func readsAvailableChatGPTResetsAndDropsUsedOrExpiredOnes() {
+        let now = Date(timeIntervalSince1970: 1_790_000_000)
+        let credits = CodexParser.resetCredits(from: json("""
+        { "rateLimitResetCredits": {
+            "availableCount": 2,
+            "credits": [
+              { "id": "soon", "status": "available", "expiresAt": 1792700725, "title": "Full reset" },
+              { "id": "later", "status": "available", "expiresAt": 1794007322, "title": "Full reset (Weekly + 5h)" },
+              { "id": "used", "status": "consumed", "expiresAt": 1793299846, "title": "Full reset" },
+              { "id": "gone", "status": "available", "expiresAt": 1780000000, "title": "Full reset" }
+            ]
+        } }
+        """), now: now)
+        #expect(credits?.count == 2)
+        #expect(credits?.credits.map(\.id) == ["soon", "later"])
+        #expect(credits?.credits[0].label == "Full reset")
+        #expect(credits?.credits[1].label == "Full reset (Weekly + 5h)")
+
+        let countOnly = CodexParser.resetCredits(from: json(#"{ "rate_limit_reset_credits": { "available_count": 1 } }"#), now: now)
+        #expect(countOnly == ResetCredits(availableCount: 1, credits: []))
+        #expect(CodexParser.resetCredits(from: json(#"{ "rateLimitResetCredits": { "availableCount": 0, "credits": [] } }"#), now: now) == nil)
+    }
+
     @Test func requiresPlanType() {
         #expect(throws: ProviderIssue.invalidResponse) { try CodexParser.usage(from: json(#"{ "detail": "x" }"#)) }
     }
@@ -278,6 +301,35 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(Formatting.countdown(to: now.addingTimeInterval(3 * 86_400 + 4 * 3_600 + 30), from: now) == "3d 4h")
         #expect(Formatting.countdown(to: now.addingTimeInterval(20), from: now) == "1m")
         #expect(Formatting.countdown(to: now.addingTimeInterval(-5), from: now) == "now")
+        #expect(Formatting.relative(now.addingTimeInterval(-90 * 60), from: now) == "1 h ago")
+        #expect(Formatting.relative(now.addingTimeInterval(-(3 * 86_400 + 4 * 3_600)), from: now) == "3d 4h ago")
+        #expect(Formatting.relative(now.addingTimeInterval(-2 * 86_400), from: now) == "2d ago")
+        #expect(Formatting.formatTokens(950) == "950")
+        #expect(Formatting.formatTokens(45_200) == "45.2k")
+        #expect(Formatting.formatTokens(1_250_000) == "1.25M")
+        #expect(Formatting.formatTokens(26_009_930_000) == "26.01B")
+        #expect(Formatting.formatTokens(1_000) == "1k")
+    }
+
+    @Test func claudeTokenBackoffGrowsAndRemembersTheWait() throws {
+        #expect(ClaudeTokenBackoff.delay(attempt: 0, retryAfter: nil) == 30 * 60)
+        #expect(ClaudeTokenBackoff.delay(attempt: 1, retryAfter: nil) == 60 * 60)
+        #expect(ClaudeTokenBackoff.delay(attempt: 20, retryAfter: nil) == 12 * 3_600)
+        #expect(ClaudeTokenBackoff.delay(attempt: 3, retryAfter: 90) == 90)
+        #expect(ClaudeTokenBackoff.delay(attempt: 3, retryAfter: 10) == 60)
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        let url = directory.appendingPathComponent("claude-token-backoff.json")
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        #expect(!ClaudeTokenBackoff.isCoolingDown(at: now, from: url))
+        ClaudeTokenBackoff.recordLimit(retryAfter: nil, now: now, to: url)
+        #expect(ClaudeTokenBackoff.isCoolingDown(at: now.addingTimeInterval(10 * 60), from: url))
+        #expect(!ClaudeTokenBackoff.isCoolingDown(at: now.addingTimeInterval(31 * 60), from: url))
+        ClaudeTokenBackoff.recordLimit(retryAfter: 120, now: now, to: url)
+        #expect(ClaudeTokenBackoff.load(from: url)?.attempts == 2)
+        #expect(ClaudeTokenBackoff.isCoolingDown(at: now.addingTimeInterval(119), from: url))
+        ClaudeTokenBackoff.clear(at: url)
+        #expect(ClaudeTokenBackoff.load(from: url) == nil)
+        try? FileManager.default.removeItem(at: directory)
     }
 }
 
@@ -305,6 +357,19 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         #expect(ClaudeParser.applyingRefresh(json(#"{ "error": "invalid_grant" }"#), to: stored) == nil)
     }
 
+    @Test func refreshRequestMatchesTheClaudeCodeBody() throws {
+        let data = try #require(ClaudeParser.refreshRequest(refreshToken: "r", scopes: ["user:inference", "user:profile"], clientID: "client"))
+        let object = try JSON.object(data)
+        #expect(JSON.string(object["grant_type"]) == "refresh_token")
+        #expect(JSON.string(object["refresh_token"]) == "r")
+        #expect(JSON.string(object["client_id"]) == "client")
+        #expect(JSON.string(object["scope"]) == "user:inference user:profile")
+        let stored = json(#"{ "claudeAiOauth": { "accessToken": "a", "scopes": ["user:inference", " ", "user:sessions:claude_code"] } }"#)
+        #expect(ClaudeParser.scopes(from: stored) == ["user:inference", "user:sessions:claude_code"])
+        let withoutScopes = try #require(ClaudeParser.refreshRequest(refreshToken: "r", scopes: [], clientID: "client"))
+        #expect(try JSON.object(withoutScopes)["scope"] == nil)
+    }
+
     @Test func parsesCodexAccount() {
         #expect(CodexParser.identity(from: json(#"{ "account": { "type": "chatgpt", "email": "me@example.com", "planType": "plus" }, "requiresOpenaiAuth": true }"#))
             == AccountIdentity(email: "me@example.com", plan: "Plus"))
@@ -317,6 +382,21 @@ private func json(_ string: String) -> Data { Data(string.utf8) }
         let output = "\u{1B}[1mStarting local login server.\u{1B}[0m If your browser did not open, navigate to:\n\n  https://auth.openai.com/oauth/authorize?client_id=abc&state=xyz\n"
         #expect(LoginURL.first(in: output)?.absoluteString == "https://auth.openai.com/oauth/authorize?client_id=abc&state=xyz")
         #expect(LoginURL.first(in: "no link here") == nil)
+    }
+
+    @Test func prefersFileWhenKeychainHasNoAccessToken() {
+        let file = json(#"{ "claudeAiOauth": { "accessToken": "file-token", "refreshToken": "r", "expiresAt": 2000000000000, "subscriptionType": "team" } }"#)
+        let blank = json(#"{ "claudeAiOauth": { "accessToken": "", "refreshToken": "", "expiresAt": 0, "subscriptionType": "team" } }"#)
+        let selected = SharedClaudeLogin.select(keychain: blank, file: file)
+        #expect(selected?.credentials.accessToken == "file-token")
+        #expect(selected?.keychainRepair == file)
+        let keychain = json(#"{ "claudeAiOauth": { "accessToken": "keychain-token", "expiresAt": 2000000000000, "subscriptionType": "max", "rateLimitTier": "default_claude_max_5x" } }"#)
+        let preferred = SharedClaudeLogin.select(keychain: keychain, file: file)
+        #expect(preferred?.credentials.accessToken == "keychain-token")
+        #expect(preferred?.credentials.plan == "Max 5x")
+        #expect(preferred?.keychainRepair == nil)
+        #expect(SharedClaudeLogin.select(keychain: blank, file: blank) == nil)
+        #expect(SharedClaudeLogin.select(keychain: nil, file: file)?.keychainRepair == nil)
     }
 
     @Test func scopesClaudeKeychainServiceByConfigDirectory() {
@@ -460,8 +540,25 @@ private func hex(_ string: String) -> Data {
 struct SharedClaudeLoginLiveTests {
     @Test func renewReturnsTheCurrentCLISession() async throws {
         let current = try #require(await SharedClaudeLogin.read())
-        let renewed = try #require(await SharedClaudeLogin.renew(replacing: "stale-\(UUID().uuidString)"))
+        guard case .current(let renewed) = await SharedClaudeLogin.renew(replacing: "stale-\(UUID().uuidString)") else {
+            Issue.record("Claude session was not renewed")
+            return
+        }
         #expect(renewed.accessToken == current.accessToken || !renewed.isExpiring(at: Date()))
+    }
+}
+
+// Live check against api.meta.ai with the `muse login` Keychain item; run with QUOTA_LIVE_TESTS=1 scripts/test.sh.
+@Suite(.enabled(if: ProcessInfo.processInfo.environment["QUOTA_LIVE_TESTS"] != nil))
+struct MuseCodeLiveTests {
+    @Test func readsTheAccountsPageWindows() async throws {
+        let identity = try #require(await AccountLinker.detectCLILogin(.musecode), "Muse Code is not signed in on this Mac")
+        let account = Account(provider: .musecode, source: .cli, email: identity.email, plan: identity.plan)
+        let snapshot = try await UsageFetchers.fetch(account)
+        #expect(snapshot.windows.contains { $0.kind == .session })
+        #expect(snapshot.windows.contains { $0.kind == .weekly })
+        let windows = snapshot.windows.map { "\($0.label) \(Int($0.usedPercent.rounded()))% used" }.joined(separator: ", ")
+        print("Muse Code (\(snapshot.plan ?? "no plan")): \(windows)")
     }
 }
 
@@ -476,6 +573,125 @@ struct OllamaCloudLiveTests {
         let windows = snapshot.windows.map { "\($0.label) \(Int($0.usedPercent.rounded()))% used" }.joined(separator: ", ")
         print("Ollama Cloud: \(snapshot.account ?? "?") (\(snapshot.plan ?? "no plan")): \(windows)")
     }
+}
+
+@Suite struct MuseCodeParserTests {
+    @Test func mapsTheAccountsPageWindows() throws {
+        let snapshot = try MuseCodeParser.snapshot(from: json("""
+        {
+          "is_subs_active": true,
+          "subs_tier_name": "Muse Code High Usage",
+          "user_email": "name@example.com",
+          "api_key": "must-not-matter",
+          "subs_usage": {
+            "tier": "27681527378179523",
+            "window": { "used_percent": 7, "window_duration_mins": 300, "resets_at": 1792086750 },
+            "weekly": { "used_percent": 36, "resets_at": 1792368000 }
+          }
+        }
+        """))
+        #expect(snapshot.provider == .musecode)
+        #expect(snapshot.plan == "High Usage")
+        #expect(snapshot.account == "name@example.com")
+        #expect(snapshot.windows.map(\.kind) == [.session, .weekly])
+        #expect(snapshot.windows.map { Int($0.usedPercent) } == [7, 36])
+        #expect(snapshot.windows[0].resetsAt == Date(timeIntervalSince1970: 1_792_086_750))
+        #expect(snapshot.windows[1].resetsAt == Date(timeIntervalSince1970: 1_792_368_000))
+        let now = Date(timeIntervalSince1970: 1_792_080_000)
+        #expect(snapshot.menuBarWindows(at: now).map(\.kind) == [.session, .weekly])
+    }
+
+    @Test func keepsANonFiveHourWindowCustom() throws {
+        let snapshot = try MuseCodeParser.snapshot(from: json("""
+        {
+          "subs_tier_name": "Everyday Usage",
+          "subs_usage": {
+            "window": { "used_percent": 12.5, "window_duration_mins": 60, "resets_at": 1700000000 }
+          }
+        }
+        """))
+        #expect(snapshot.plan == "Everyday Usage")
+        #expect(snapshot.windows.map(\.kind) == [.custom(minutes: 60)])
+        #expect(snapshot.windows[0].usedPercent == 12.5)
+    }
+
+    @Test func rejectsAnInactiveSubscriptionAndABlankToken() {
+        let inactive = json(#"{ "is_subs_active": false, "subs_usage": { "weekly": { "used_percent": 1, "resets_at": 1700000000 } } }"#)
+        #expect(throws: ProviderIssue.noQuota(String(localized: "This Muse Code account has no active subscription."))) {
+            try MuseCodeParser.snapshot(from: inactive)
+        }
+        #expect(MuseCodeParser.accessToken(from: json(#"{"access_token":""}"#)) == nil)
+        #expect(MuseCodeParser.accessToken(from: json(#"{"access_token":"account-token"}"#)) == "account-token")
+        #expect(MuseCodeParser.planLabel("Muse Code High Usage") == "High Usage")
+        #expect(MuseCodeParser.planLabel(nil) == nil)
+    }
+
+    @Test func sumsTodayAndTheLastSevenDaysFromSessionLogs() throws {
+        let now = Date(timeIntervalSince1970: 1_800_000_000)
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: root) }
+        try writeLog(root: root, at: now, session: "session-a", lines: [
+            record(at: now, session: "session-a", usage: #"{"input_tokens":1000,"output_tokens":50,"cached_tokens":800,"cache_write_tokens":10,"reasoning_tokens":5}"#),
+            record(at: now, session: "session-a", usage: #"{"input_tokens":500,"output_tokens":25,"cache_read_tokens":400}"#),
+            "not json",
+            #"{"recorded_at":\#(Int(now.timeIntervalSince1970 * 1_000_000)),"payload":{"event":{"kind":"model_response_created"}}}"#,
+        ])
+        try writeLog(root: root, at: now, session: "session-a", lines: [
+            record(at: now, session: "session-a", usage: #"{"input_tokens":200,"output_tokens":10,"cached_tokens":100,"reasoning_tokens":0}"#),
+        ], subagent: true)
+        let threeDaysAgo = now.addingTimeInterval(-3 * 86_400)
+        try writeLog(root: root, at: threeDaysAgo, session: "session-b", lines: [
+            record(at: threeDaysAgo, session: "session-b", usage: #"{"input_tokens":2000,"output_tokens":100,"cached_tokens":1500,"reasoning_tokens":20}"#),
+        ])
+        let tenDaysAgo = now.addingTimeInterval(-10 * 86_400)
+        try writeLog(root: root, at: tenDaysAgo, session: "session-old", lines: [
+            record(at: tenDaysAgo, session: "session-old", usage: #"{"input_tokens":9999,"output_tokens":9999,"cached_tokens":0,"reasoning_tokens":0}"#),
+        ])
+        let aggregate = MuseLogs.aggregate(root: root, now: now)
+        let today = try #require(aggregate.usage.first { $0.period == "today" })
+        let week = try #require(aggregate.usage.first { $0.period == "last7Days" })
+        #expect(aggregate.model == "muse-wonder-1.0")
+        #expect(today.inputTokens == 1_700)
+        #expect(today.outputTokens == 85)
+        #expect(today.cachedTokens == 1_300)
+        #expect(today.cacheWriteTokens == 10)
+        #expect(today.reasoningTokens == 5)
+        #expect(today.sessions == 1)
+        #expect(today.steps == 3)
+        #expect(today.totalTokens == 1_785)
+        #expect(today.resetsAt != nil)
+        #expect(today.label == "Today")
+        #expect(week.inputTokens == 3_700)
+        #expect(week.outputTokens == 185)
+        #expect(week.steps == 4)
+        #expect(week.sessions == 2)
+        #expect(week.resetsAt == nil)
+        #expect(week.label == "Last 7 days")
+        let empty = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: empty) }
+        #expect(!MuseLogs.aggregate(root: empty, now: now).hasSteps)
+    }
+}
+
+private func record(at date: Date, session: String, usage: String) -> String {
+    let recorded = Int(date.timeIntervalSince1970 * 1_000_000)
+    return #"{"recorded_at":\#(recorded),"stream":{"kind":"session","id":"\#(session)"},"payload":{"event":{"kind":"model_completed","model":"muse-wonder-1.0","usage":\#(usage)}}}"#
+}
+
+private func writeLog(root: URL, at date: Date, session: String, lines: [String], subagent: Bool = false) throws {
+    let calendar = Calendar.current
+    let parts = calendar.dateComponents([.year, .month, .day], from: date)
+    var directory = root
+        .appendingPathComponent(String(format: "%04d", parts.year ?? 0))
+        .appendingPathComponent(String(format: "%02d", parts.month ?? 0))
+        .appendingPathComponent(String(format: "%02d", parts.day ?? 0))
+        .appendingPathComponent(session)
+    if subagent {
+        directory = directory.appendingPathComponent("subagent").appendingPathComponent("child-1")
+    }
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+    let text = lines.joined(separator: "\n") + "\n"
+    try text.write(to: directory.appendingPathComponent("session.jsonl"), atomically: true, encoding: .utf8)
 }
 
 @Suite struct UsagePayloadTests {

@@ -39,7 +39,7 @@ enum Commands {
           quota-server status             fetch and print the usage of the linked accounts
           quota-server detect             show the CLI logins found on this Mac
           quota-server accounts           list the linked accounts
-          quota-server link <service>     link the CLI login of claude, codex, grok or ollama
+          quota-server link <service>     link the CLI login of claude, codex, grok, ollama or musecode
           quota-server signin ollama      link another Ollama Cloud account (approve it in any browser)
           quota-server unlink <id>        unlink an account (id prefix from `accounts`)
           quota-server pair               create a single-use code to pair a device
@@ -89,9 +89,8 @@ enum Commands {
             do {
                 let snapshot = try await UsageFetchers.fetch(account)
                 print(snapshot.plan.map { "\(title) (\($0))" } ?? title)
-                for window in snapshot.windows {
-                    let reset = window.resetsAt.map { ", resets in \(Formatting.countdown(to: $0, from: now))" } ?? ""
-                    print("  \(window.label): \(window.remainingPercent(at: now))% left\(reset)")
+                for line in snapshot.reportLines(at: now) {
+                    print(line)
                 }
             } catch let issue as ProviderIssue {
                 print("\(title): \(issue.message)")
@@ -126,7 +125,7 @@ enum Commands {
 
     private static func link(_ arguments: [String]) async -> Int32 {
         guard let provider = arguments.first.flatMap(Provider.init(rawValue:)) else {
-            print("Usage: quota-server link <claude|codex|grok|ollama>")
+            print("Usage: quota-server link <claude|codex|grok|ollama|musecode>")
             return 1
         }
         if AccountStorage.load().contains(where: { $0.provider == provider && $0.source == .cli }) {

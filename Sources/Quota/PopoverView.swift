@@ -8,9 +8,11 @@ final class PopoverRouter: ObservableObject {
     enum Page {
         case usage
         case addAccount
+        case activity
     }
 
     @Published var page: Page = .usage
+    let activity = TokenActivityStore()
     private var cancellable: AnyCancellable?
 
     init(linker: LinkController) {
@@ -42,11 +44,14 @@ struct PopoverView: View {
                     settings: settings,
                     onRefresh: store.refresh,
                     onAddAccount: { router.page = .addAccount },
-                    onUnlink: linker.unlink
+                    onUnlink: linker.unlink,
+                    onActivity: { router.activity.load(accounts: accounts.accounts); router.page = .activity }
                 )
             }
         case .addAccount:
             AddAccountPanel(linker: linker, accounts: accounts, onBack: { router.page = .usage })
+        case .activity:
+            TokenActivityView(store: router.activity, onBack: { router.page = .usage })
         }
     }
 }
@@ -61,6 +66,7 @@ struct UsagePanel: View {
     let onRefresh: () -> Void
     let onAddAccount: () -> Void
     let onUnlink: (Account) -> Void
+    var onActivity: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -106,6 +112,12 @@ struct UsagePanel: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button(action: onActivity) {
+                Image(systemName: "square.grid.3x3.fill").frame(width: 22, height: 22)
+            }
+            .buttonStyle(.plain)
+            .foregroundStyle(.secondary)
+            .help("Token activity")
             Button(action: onRefresh) {
                 ZStack {
                     if isRefreshing {
@@ -129,7 +141,7 @@ struct UsagePanel: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("No linked accounts")
                 .font(.system(size: 13, weight: .semibold))
-            Text("Choose which Claude, Codex, Grok and Ollama Cloud accounts to monitor.")
+            Text("Choose which Claude, Codex, Grok, Ollama Cloud and Muse Code accounts to monitor.")
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
@@ -243,6 +255,12 @@ private struct AccountCard: View {
                 ForEach(snapshot.windows) { window in
                     WindowRow(window: window, now: now, displayMode: displayMode)
                 }
+                ForEach(snapshot.tokenUsage) { usage in
+                    TokenRow(usage: usage, now: now)
+                }
+                if let credits = snapshot.resetCredits, !credits.isEmpty {
+                    ResetCreditsSection(credits: credits, now: now)
+                }
             }
             if let issue = entry?.issue {
                 issueLine(issue)
@@ -328,7 +346,9 @@ private struct ProviderLinkCard: View {
                     .font(.system(size: 13, weight: .semibold))
             }
             sharedLoginRow
-            signInRow
+            if provider.supportsAnotherAccount {
+                signInRow
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
@@ -448,6 +468,69 @@ private struct WindowRow: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .help(Formatting.absolute(resetsAt))
+            }
+        }
+    }
+}
+
+private struct TokenRow: View {
+    let usage: TokenUsage
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text(usage.label)
+                    .font(.system(size: 12))
+                Spacer(minLength: 8)
+                Text(verbatim: Formatting.formatTokens(usage.totalTokens))
+                    .font(.system(size: 12, weight: .semibold))
+                    .monospacedDigit()
+                Text("tokens")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+            }
+            Text(usage.breakdown)
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if let resetsAt = usage.resetsAt {
+                Text(usage.hasReset(at: now) ? String(localized: "Reset, updating") : String(localized: "Resets in \(Formatting.countdown(to: resetsAt, from: now))"))
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                    .help(Formatting.absolute(resetsAt))
+            }
+        }
+    }
+}
+
+private struct ResetCreditsSection: View {
+    let credits: ResetCredits
+    let now: Date
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Text("Resets")
+                    .font(.system(size: 12))
+                Spacer(minLength: 8)
+                Text(String(localized: "\(credits.count) available"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .monospacedDigit()
+            }
+            ForEach(credits.credits) { credit in
+                HStack(alignment: .firstTextBaseline, spacing: 4) {
+                    Text(verbatim: credit.label)
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                    Spacer(minLength: 8)
+                    if let expiresAt = credit.expiresAt {
+                        Text(String(localized: "expires in \(Formatting.countdown(to: expiresAt, from: now))"))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.secondary)
+                            .help(Formatting.absolute(expiresAt))
+                    }
+                }
             }
         }
     }

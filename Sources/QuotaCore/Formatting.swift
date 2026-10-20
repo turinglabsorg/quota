@@ -32,8 +32,29 @@ public enum Formatting {
         switch seconds {
         case ..<60: return String(localized: "now")
         case ..<3_600: return String(localized: "\(seconds / 60) min ago")
-        default: return String(localized: "\(seconds / 3_600) h ago")
+        case ..<86_400: return String(localized: "\(seconds / 3_600) h ago")
+        default:
+            let days = seconds / 86_400
+            let hours = (seconds % 86_400) / 3_600
+            return hours > 0 ? String(localized: "\(days)d \(hours)h ago") : String(localized: "\(days)d ago")
         }
+    }
+
+    /// Compact token counts: 950, 45.2k, 1.25M, 2.5B.
+    public static func formatTokens(_ count: Int) -> String {
+        if count >= 1_000_000_000 { return trimmed(Double(count) / 1_000_000_000, decimals: 2) + "B" }
+        if count >= 1_000_000 { return trimmed(Double(count) / 1_000_000, decimals: 2) + "M" }
+        if count >= 1_000 { return trimmed(Double(count) / 1_000, decimals: 1) + "k" }
+        return String(count)
+    }
+
+    private static func trimmed(_ value: Double, decimals: Int) -> String {
+        let text = String(format: "%.\(decimals)f", locale: Locale(identifier: "en_US_POSIX"), value)
+        if text.contains(".") {
+            return text.replacingOccurrences(of: #"0+$"#, with: "", options: .regularExpression)
+                .replacingOccurrences(of: #"\.$"#, with: "", options: .regularExpression)
+        }
+        return text
     }
 
     public static func duration(minutes: Int) -> String {

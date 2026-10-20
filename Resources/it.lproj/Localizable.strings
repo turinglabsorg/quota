@@ -12,7 +12,17 @@
 "%lld d" = "%lld g";
 "%lld min ago" = "%lld min fa";
 "%lld h ago" = "%lld h fa";
+"%lldd %lldh ago" = "%lldg %lldh fa";
+"%lldd ago" = "%lldg fa";
 "Resets in %@" = "Reset tra %@";
+"Today" = "Oggi";
+"Last 7 days" = "Ultimi 7 giorni";
+"Resets" = "Reset";
+"%lld available" = "%lld disponibili";
+"Full reset" = "Reset completo";
+"expires in %@" = "scade tra %@";
+"tokens" = "token";
+"in %@ · out %@ · cache %@ · reasoning %@ · %lld sessions · %lld steps" = "in %@ · out %@ · cache %@ · reasoning %@ · %lld sessioni · %lld step";
 "Reset, updating" = "Azzerato, in aggiornamento";
 "Updated %@" = "Aggiornato %@";
 "Data from %@. %@" = "Dati di %@. %@";
@@ -27,7 +37,22 @@
 "%@ is already linked." = "%@ è già collegato.";
 
 /* Issues */
-"Too many requests: retrying on the next refresh." = "Troppe richieste: riprovo al prossimo aggiornamento.";
+"Too many requests: retrying later." = "Troppe richieste: riprovo più tardi.";
+"Too many requests: next attempt in %@." = "Troppe richieste: prossimo tentativo tra %@.";
+"Meta has not returned the subscription usage yet." = "Meta non ha ancora restituito i consumi dell’abbonamento.";
+"Token activity" = "Attività token";
+"Last 12 weeks · this Mac" = "Ultime 12 settimane · questo Mac";
+"tokens processed" = "token elaborati";
+"All providers" = "Tutti i provider";
+"Reading local token history…" = "Lettura della cronologia token locale…";
+"No token history found in the local session logs." = "Nessuna cronologia token nei registri delle sessioni locali.";
+"Less" = "Meno";
+"More" = "Più";
+"Select a day" = "Seleziona un giorno";
+"Local CLI sessions only. Totals include cached input; reasoning is included in output. Web and other-device usage is not included." = "Solo sessioni CLI locali. I totali includono la cache in ingresso; il ragionamento è incluso nell’output. Sono esclusi il web e gli altri dispositivi.";
+"Ollama Cloud is not included in token history." = "Ollama Cloud non è incluso nella cronologia dei token.";
+"Some session files could not be read." = "Non è stato possibile leggere alcuni registri delle sessioni.";
+"Input %@ · output %@ · cached %@" = "Input %@ · output %@ · cache %@";
 "Server error (HTTP %lld)." = "Errore del server (HTTP %lld).";
 "Network unreachable." = "Rete non raggiungibile.";
 "Unrecognized response." = "Risposta non riconosciuta.";
@@ -47,6 +72,10 @@
 "Grok reports no usage percentage for this account." = "Grok non riporta una percentuale per questo account.";
 "Not signed in to Ollama Cloud. Run `ollama signin`." = "Nessun login a Ollama Cloud. Esegui `ollama signin`.";
 "Ollama Cloud session expired: relink the account." = "Sessione Ollama Cloud scaduta: ricollega l'account.";
+"Not signed in to Muse Code. Run `muse login`." = "Nessun login a Muse Code. Esegui `muse login`.";
+"Muse Code session expired. Run `muse login`." = "La sessione di Muse Code è scaduta. Esegui `muse login`.";
+"This Muse Code account has no active subscription." = "Questo account Muse Code non ha un abbonamento attivo.";
+"Muse Code has no separate sign-in: link the local login instead." = "Muse Code non ha un accesso separato: collega il login locale.";
 
 /* Sign-in */
 "`%@` CLI not found: install it and try again." = "CLI `%@` non trovata: installala e riprova.";
@@ -72,7 +101,7 @@
 "Add account" = "Aggiungi account";
 "Refresh now" = "Aggiorna ora";
 "No linked accounts" = "Nessun account collegato";
-"Choose which Claude, Codex, Grok and Ollama Cloud accounts to monitor." = "Scegli tu quali account di Claude, Codex, Grok e Ollama Cloud monitorare.";
+"Choose which Claude, Codex, Grok, Ollama Cloud and Muse Code accounts to monitor." = "Scegli tu quali account di Claude, Codex, Grok, Ollama Cloud e Muse Code monitorare.";
 "No accounts" = "Nessun account";
 "Updating…" = "Aggiornamento…";
 "Waiting for data…" = "In attesa dei dati…";
@@ -110,5 +139,5 @@
 "Unpair this device" = "Scollega questo dispositivo";
 "Done" = "Fine";
 "Open Quota to pair" = "Apri Quota per abbinare";
-"How much of your Claude, Codex, Grok and Ollama Cloud limits you have left." = "Quanto ti resta dei limiti di Claude, Codex, Grok e Ollama Cloud.";
+"How much of your Claude, Codex, Grok, Ollama Cloud and Muse Code limits you have left." = "Quanto ti resta dei limiti di Claude, Codex, Grok, Ollama Cloud e Muse Code.";
 "Couldn't save the pairing on this device." = "Impossibile salvare l'abbinamento su questo dispositivo.";

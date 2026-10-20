@@ -1,12 +1,12 @@
 # Quota
 
-A tiny native macOS menu bar app that shows how much of your **Claude**, **Codex**, **Grok** and **Ollama Cloud** subscription limits you have left, at a glance.
+A tiny native macOS menu bar app that shows how much of your **Claude**, **Codex**, **Grok**, **Ollama Cloud** and **Muse Code** subscription limits you have left, at a glance.
 
 On Linux, use [Quotax](https://github.com/turinglabsorg/quotax), the GNOME Shell version.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/readme-dark.png">
-  <img alt="Quota menu bar item and popover showing usage for Claude, Codex, Grok and Ollama Cloud" src="docs/screenshots/readme-light.png" width="720">
+  <img alt="Quota menu bar item and popover showing usage for Claude, Codex, Grok, Ollama Cloud and Muse Code" src="docs/screenshots/readme-light.png" width="720">
 </picture>
 
 Inspired by the usage readout in [Orca](https://github.com/stablyai/orca), packaged as a standalone menu bar app.
@@ -14,8 +14,10 @@ Inspired by the usage readout in [Orca](https://github.com/stablyai/orca), packa
 ## Features
 
 - **Menu bar**: one percentage per linked account, showing the tightest account-wide window. Accounts with both a 5-hour session and a weekly (or monthly) window, like Claude, show both in a small stacked column: session above, weekly below. Orange under 20%, red under 5%.
-- **Popover**: every window (5-hour session, weekly, model-scoped weekly, monthly) with a bar and a reset countdown.
+- **Popover**: every window (5-hour session, weekly, model-scoped weekly, monthly) with a bar and a reset countdown. Muse Code also lists today's tokens and the last 7 days, and when today resets. Codex lists the ChatGPT rate-limit resets still available, and when each one expires.
 - **You choose the accounts**: reuse the login of a CLI already on your Mac, or sign in to a different account in the browser. New sign-ins are kept separate from your CLI sessions, so you can monitor several accounts per service.
+- Linked accounts keep their menu bar icon while loading or unavailable. Previous quota readings remain dimmed through transient failures. If Meta omits Muse's idle subscription quota, opening Quota restores it with one minimal inference (at most 16 output tokens); automatic polling never activates an idle session.
+- **Token activity**: open the grid icon for a daily heatmap of the last 12 weeks, combined or filtered by Claude, Codex, Grok and Muse Code. Select a day for the provider breakdown. It reads local CLI session logs, including subagents and archived Codex sessions; web and other-device usage is not included. Cached input counts as processed tokens, while reasoning is already part of output. Ollama Cloud is not included in this heatmap.
 - **Settings**: show remaining or used percentage, add accounts, launch at login.
 - **iPhone**: [Quota iOS](https://github.com/turinglabsorg/quota-ios), an app with Home Screen and Lock Screen widgets, fed by `quota-server` on an always-on Mac (see below).
 - **Native and light**: AppKit + SwiftUI, no Electron, no background services, no telemetry.
@@ -26,15 +28,16 @@ Inspired by the usage readout in [Orca](https://github.com/stablyai/orca), packa
 | Service | Plans | Windows shown |
 | --- | --- | --- |
 | Claude (Claude Code login) | Pro, Max, Team | 5-hour session, weekly, weekly per model |
-| Codex (ChatGPT login) | Free, Plus, Pro, Business | as reported by Codex (5-hour, weekly or 30-day) |
+| Codex (ChatGPT login) | Free, Plus, Pro, Business | as reported by Codex (5-hour, weekly or 30-day), plus any banked rate-limit resets and their expiry |
 | Grok (Grok CLI login) | SuperGrok and Grok plans with weekly or monthly credits | weekly credits or monthly budget |
 | Ollama Cloud (ollama.com account) | Free, Pro, Max, Team | included monthly credit (legacy plans: 5-hour session and weekly) |
+| Muse Code (`muse login`) | Everyday, High Usage, Power, Maximum | 5-hour session and weekly, the same bars as the accounts page, plus today's tokens and the last 7 days from the local session logs |
 
 ## Requirements
 
 - macOS 14 or later
 - Swift 6 toolchain (Xcode or the Command Line Tools)
-- The CLI of each service you want to link: [`claude`](https://github.com/anthropics/claude-code), [`codex`](https://github.com/openai/codex), `grok`. Ollama Cloud needs no CLI: sign in from the popover, or link the login of the [Ollama app](https://ollama.com/download) (`ollama signin`)
+- The CLI of each service you want to link: [`claude`](https://github.com/anthropics/claude-code), [`codex`](https://github.com/openai/codex), `grok`, [`muse`](https://dev.meta.ai/docs/muse-code/subscriptions). Ollama Cloud needs no CLI: sign in from the popover, or link the login of the [Ollama app](https://ollama.com/download) (`ollama signin`). Muse Code links the local `muse login` only.
 
 ## Install
 
@@ -64,10 +67,11 @@ To stop monitoring an account, open its `…` menu and choose **Unlink account**
 | Codex | JSON-RPC `account/rateLimits/read` on `codex app-server`, so Codex refreshes its own token |
 | Grok | `GET cli-chat-proxy.grok.com/v1/billing` with the Grok CLI token |
 | Ollama Cloud | [`GET ollama.com/api/balance`](https://github.com/ollama/ollama/blob/main/docs/api/balance.mdx) and `POST ollama.com/api/me`, signed with an Ed25519 device key like the Ollama CLI does |
+| Muse Code | `POST api.meta.ai/muse-code/key` with the Meta account token. `subs_usage` is the 5-hour and weekly usage the accounts page shows. Quota does not keep the API key in that response. |
 
 Quota refreshes every 5 minutes, after wake, when a window resets and when you open the popover. It only talks to the services above.
 
-Tokens are renewed by the official CLIs, never by Quota. If the Claude Code token has expired because you have not used `claude` in a while, Quota starts it in the background for a few seconds so it can renew its own session, then retries.
+Codex and Grok renew their own tokens. When a Claude Code access token is expiring, Quota renews it at Claude's token endpoint and writes the rotated refresh token back to the credentials file and the Keychain before anything else reads it.
 
 Ollama documents `/api/balance`; the other endpoints are the ones the official CLIs use, are not public APIs and may change without notice.
 
@@ -123,7 +127,7 @@ The endpoints, headers and account-isolation approach follow [Orca](https://gith
 
 ## Disclaimer
 
-Quota is an independent project and is not affiliated with, endorsed by or sponsored by Anthropic, OpenAI, xAI or Ollama. Claude, Codex, Grok and Ollama are trademarks of their respective owners.
+Quota is an independent project and is not affiliated with, endorsed by or sponsored by Anthropic, OpenAI, xAI, Ollama or Meta. Claude, Codex, Grok, Ollama and Muse are trademarks of their respective owners.
 
 ## License
 
