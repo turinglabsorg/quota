@@ -167,14 +167,14 @@ struct ClaudeFetcher {
                 credentials = fresh
             case .rateLimited:
                 if let expiresAt = credentials.expiresAt, expiresAt <= Date() {
-                    throw ProviderIssue.rateLimited
+                    throw ClaudeTokenBackoff.wait()
                 }
                 // The access token can still be accepted during the early-expiry window. A dead
                 // token comes back 401 and the card keeps the last snapshot until the backoff ends.
                 do {
                     return try await snapshot(credentials, retryAfter: retryAfter)
                 } catch ProviderIssue.http(let status) where status == 401 || status == 403 {
-                    throw ProviderIssue.rateLimited
+                    throw ClaudeTokenBackoff.wait()
                 }
             case .failed:
                 throw expired
@@ -195,7 +195,7 @@ struct ClaudeFetcher {
     private func renewed(replacing token: String, expired: ProviderIssue) async throws -> ClaudeCredentials {
         switch await SharedClaudeLogin.renew(replacing: token) {
         case .current(let credentials): return credentials
-        case .rateLimited: throw ProviderIssue.rateLimited
+        case .rateLimited: throw ClaudeTokenBackoff.wait()
         case .failed: throw expired
         }
     }
@@ -449,6 +449,15 @@ enum ClaudeTokenBackoff {
     static func isCoolingDown(at now: Date = Date(), from url: URL = file) -> Bool {
         guard let state = load(from: url) else { return false }
         return state.notBefore > now.timeIntervalSince1970
+    }
+
+    /// A limited token endpoint is not a limited usage endpoint, so this is `retryLater` rather
+    /// than `rateLimited`: `ClaudeUsageGate` keeps polling on its normal interval and picks up the
+    /// token as soon as Claude Code renews it, instead of locking usage for the token's backoff.
+    static func wait(now: Date = Date(), from url: URL = file) -> ProviderIssue {
+        let next = now.addingTimeInterval(ClaudeUsageGate.interval)
+        guard let state = load(from: url) else { return .retryLater(next) }
+        return .retryLater(max(next, Date(timeIntervalSince1970: state.notBefore)))
     }
 
     static func recordLimit(retryAfter: TimeInterval?, now: Date = Date(), to url: URL = file) {

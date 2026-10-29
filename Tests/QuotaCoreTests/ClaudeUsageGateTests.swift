@@ -75,6 +75,39 @@ import Testing
         }
     }
 
+    @Test func tokenWaitDoesNotLockUsagePolls() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let calls = Calls()
+        let now = now
+        let tokenWait = now.addingTimeInterval(12 * 3_600)
+        do {
+            _ = try await ClaudeUsageGate(directory: directory).fetch(account: account, now: { now }) { _ in
+                await calls.record()
+                throw ProviderIssue.retryLater(tokenWait)
+            }
+            Issue.record("Expected the token wait")
+        } catch ProviderIssue.retryLater(let date) {
+            #expect(date == tokenWait)
+        }
+        let result = try await ClaudeUsageGate(directory: directory).fetch(account: account, now: { now.addingTimeInterval(60) }) { _ in
+            await calls.record()
+            return snapshot(at: now.addingTimeInterval(60))
+        }
+        #expect(result.windows.count == 1)
+        #expect(await calls.count == 2)
+    }
+
+    @Test func tokenWaitReportsTheLaterOfBackoffAndNextPoll() {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let url = directory.appendingPathComponent("claude-token-backoff.json")
+        #expect(ClaudeTokenBackoff.wait(now: now, from: url) == .retryLater(now.addingTimeInterval(300)))
+        ClaudeTokenBackoff.recordLimit(retryAfter: nil, now: now, to: url)
+        #expect(ClaudeTokenBackoff.wait(now: now, from: url) == .retryLater(now.addingTimeInterval(1_800)))
+        #expect(ClaudeTokenBackoff.wait(now: now.addingTimeInterval(3_600), from: url) == .retryLater(now.addingTimeInterval(3_900)))
+    }
+
     @Test func retryAfterHonorsDatesLongWaitsAndZero() {
         #expect(RetryAfter.parse("0", now: now) == nil)
         #expect(RetryAfter.parse("garbage", now: now) == nil)
