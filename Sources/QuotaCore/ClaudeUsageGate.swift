@@ -3,6 +3,8 @@ import Darwin
 import Foundation
 
 /// App, server and CLI share one polling budget, including after a relaunch.
+/// Only `rateLimited` from the usage request itself starts a wait. `retryLater` from the operation
+/// (a limited token endpoint) passes through without one, so a renewed token is used on the next poll.
 struct ClaudeUsageGate {
     static let interval: TimeInterval = 5 * 60
     let directory: URL
