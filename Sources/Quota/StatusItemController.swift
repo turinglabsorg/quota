@@ -14,13 +14,13 @@ final class StatusItemController: NSObject {
     private var cancellables = Set<AnyCancellable>()
     private var clockTimer: Timer?
 
-    init(store: UsageStore, accounts: AccountStore, settings: AppSettings, linker: LinkController) {
+    init(store: UsageStore, accounts: AccountStore, settings: AppSettings, server: ServerLink, linker: LinkController) {
         self.store = store
         self.accounts = accounts
         self.settings = settings
         super.init()
         configureButton()
-        configurePopover(linker: linker)
+        configurePopover(linker: linker, server: server)
         linker.onLinked = { [weak self] in self?.showPopover() }
         Publishers.Merge3(store.objectWillChange, accounts.objectWillChange, settings.objectWillChange)
             .receive(on: RunLoop.main)
@@ -41,10 +41,10 @@ final class StatusItemController: NSObject {
         button.addSubview(labelView)
     }
 
-    private func configurePopover(linker: LinkController) {
+    private func configurePopover(linker: LinkController, server: ServerLink) {
         popover.behavior = .transient
         popover.animates = true
-        let controller = NSHostingController(rootView: PopoverView(store: store, accounts: accounts, settings: settings, linker: linker, router: PopoverRouter(linker: linker)))
+        let controller = NSHostingController(rootView: PopoverView(store: store, accounts: accounts, settings: settings, server: server, linker: linker, router: PopoverRouter(linker: linker, server: server)))
         controller.sizingOptions = .preferredContentSize
         popover.contentViewController = controller
     }

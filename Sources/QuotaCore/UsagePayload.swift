@@ -61,6 +61,10 @@ public struct AccountUsage: Codable, Equatable, Sendable, Identifiable {
         guard let fetchedAt else { return nil }
         return ProviderSnapshot(provider: provider, plan: plan, account: email, windows: usageWindows, fetchedAt: fetchedAt)
     }
+
+    public var account: Account {
+        Account(id: id, provider: provider, source: source, email: email, plan: plan)
+    }
 }
 
 public struct WindowUsage: Codable, Equatable, Sendable {
@@ -111,6 +115,16 @@ public struct IssueUsage: Codable, Equatable, Sendable {
     public init(_ issue: ProviderIssue) {
         kind = issue.kind
         message = issue.message
+    }
+
+    /// The server's issue, keeping its message; kinds without a message of their own become `usageUnavailable`.
+    public var providerIssue: ProviderIssue {
+        switch kind {
+        case "signedOut": .signedOut(message)
+        case "sessionExpired": .sessionExpired(message)
+        case "noQuota": .noQuota(message)
+        default: .usageUnavailable(message)
+        }
     }
 }
 

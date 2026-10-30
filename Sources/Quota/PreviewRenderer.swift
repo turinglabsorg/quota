@@ -102,6 +102,29 @@ enum PreviewRenderer {
                     .environment(\.colorScheme, scheme).environment(\.isStaticPreview, true),
                 to: directory.appendingPathComponent("activity-\(suffix).png")
             )
+            for (name, server) in [("pairing", ServerLink(serverURL: nil)), ("connected", ServerLink(serverURL: URL(string: "https://quota.example.com")))] {
+                write(
+                    ServerPanel(server: server, onBack: {}).background(background).environment(\.colorScheme, scheme),
+                    to: directory.appending(path: "server-\(name)-\(suffix).png")
+                )
+            }
+            write(
+                UsagePanel(
+                    accounts: accounts,
+                    entries: healthyEntries(now: now),
+                    lastRefresh: now.addingTimeInterval(-120),
+                    isRefreshing: false,
+                    now: now,
+                    settings: settings,
+                    onRefresh: {},
+                    onAddAccount: {},
+                    onUnlink: { _ in },
+                    remoteHost: "quota.example.com"
+                )
+                .background(background)
+                .environment(\.colorScheme, scheme),
+                to: directory.appending(path: "panel-remote-\(suffix).png")
+            )
             let store = AccountStore(accounts: [claude])
             let linker = LinkController(
                 accounts: store,

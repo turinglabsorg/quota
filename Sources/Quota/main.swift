@@ -18,6 +18,22 @@ if arguments.contains("--print-activity") {
     dispatchMain()
 }
 
+if let index = arguments.firstIndex(of: "--pair"), arguments.indices.contains(index + 2) {
+    Task.detached {
+        exit(await CLIReport.pair(address: arguments[index + 1], code: arguments[index + 2]))
+    }
+    dispatchMain()
+}
+
+if arguments.contains("--unpair") {
+    Task.detached {
+        await ServerConnection.unpair()
+        print("This Mac reads its own accounts again.")
+        exit(0)
+    }
+    dispatchMain()
+}
+
 if arguments.contains("--print") {
     Task.detached {
         await CLIReport.run()

@@ -133,3 +133,50 @@ private func request(_ method: String, _ path: String, headers: [String: String]
         #expect(decoded.accounts.map(\.provider) == [.claude])
     }
 }
+
+@Suite struct ServerConnectionTests {
+    @Test func normalizesServerAddresses() {
+        #expect(ServerConnection.address(from: " quota.example.com/ ")?.absoluteString == "https://quota.example.com")
+        #expect(ServerConnection.address(from: "http://127.0.0.1:4310")?.absoluteString == "http://127.0.0.1:4310")
+        #expect(ServerConnection.address(from: "ftp://quota.example.com") == nil)
+        #expect(ServerConnection.address(from: "") == nil)
+    }
+
+    @Test func mapsServerIssues() {
+        #expect(IssueUsage(.sessionExpired("Sign in again.")).providerIssue == .sessionExpired("Sign in again."))
+        #expect(IssueUsage(.noQuota("No limits.")).providerIssue == .noQuota("No limits."))
+        #expect(IssueUsage(.rateLimited).providerIssue == .usageUnavailable(ProviderIssue.rateLimited.message))
+    }
+
+    @Test func pairsAndReadsUsageOverHTTP() async throws {
+        let store = temporaryStore()
+        let account = Account(provider: .claude, source: .cli, email: "me@example.com", plan: "Team")
+        let cache = UsageCache(loadAccounts: { [account] }, fetch: { _ in
+            ProviderSnapshot(provider: .claude, plan: "Team", account: "me@example.com", windows: [
+                UsageWindow(kind: .weekly, usedPercent: 40, resetsAt: Date(timeIntervalSince1970: 1_800_000_000)),
+            ], issue: .retryLater(Date(timeIntervalSince1970: 1_800_000_000)))
+        })
+        await cache.refresh()
+        let port = UInt16.random(in: 40_000..<50_000)
+        let server = try HTTPServer(port: port, handler: Routes.handler(cache: cache, devices: store))
+        server.start()
+        let url = try #require(URL(string: "http://127.0.0.1:\(port)"))
+        try await Task.sleep(nanoseconds: 200_000_000)
+
+        await #expect(throws: ServerConnection.Failure.invalidCode) {
+            try await ServerConnection.requestToken(server: url, code: "00000000x", deviceName: "Mac")
+        }
+        let token = try await ServerConnection.requestToken(server: url, code: store.createPairingCode().code, deviceName: "My Mac")
+        #expect(store.devices().map(\.name) == ["My Mac"])
+
+        let payload = try await ServerConnection.fetchUsage(server: url, token: token)
+        let usage = try #require(payload.accounts.first)
+        #expect(usage.account == account)
+        #expect(usage.snapshot?.windows == [UsageWindow(kind: .weekly, usedPercent: 40, resetsAt: Date(timeIntervalSince1970: 1_800_000_000))])
+        #expect(usage.issue?.providerIssue == .usageUnavailable(ProviderIssue.retryLater(Date(timeIntervalSince1970: 1_800_000_000)).message))
+
+        await #expect(throws: ServerConnection.Failure.unauthorized) {
+            try await ServerConnection.fetchUsage(server: url, token: "revoked")
+        }
+    }
+}

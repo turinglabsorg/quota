@@ -9,18 +9,26 @@ final class PopoverRouter: ObservableObject {
         case usage
         case addAccount
         case activity
+        case server
     }
 
     @Published var page: Page = .usage
     let activity = TokenActivityStore()
-    private var cancellable: AnyCancellable?
+    private var cancellables = Set<AnyCancellable>()
 
-    init(linker: LinkController) {
-        cancellable = linker.$lastLinkedID
+    init(linker: LinkController, server: ServerLink) {
+        linker.$lastLinkedID
             .dropFirst()
             .compactMap { $0 }
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in MainActor.assumeIsolated { self?.page = .usage } }
+            .store(in: &cancellables)
+        server.$serverURL
+            .dropFirst()
+            .compactMap { $0 }
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in MainActor.assumeIsolated { self?.page = .usage } }
+            .store(in: &cancellables)
     }
 }
 
@@ -28,6 +36,7 @@ struct PopoverView: View {
     @ObservedObject var store: UsageStore
     @ObservedObject var accounts: AccountStore
     @ObservedObject var settings: AppSettings
+    @ObservedObject var server: ServerLink
     @ObservedObject var linker: LinkController
     @ObservedObject var router: PopoverRouter
 
@@ -45,9 +54,14 @@ struct PopoverView: View {
                     onRefresh: store.refresh,
                     onAddAccount: { router.page = .addAccount },
                     onUnlink: linker.unlink,
-                    onActivity: { router.activity.load(accounts: accounts.accounts); router.page = .activity }
+                    onActivity: { router.activity.load(accounts: accounts.accounts); router.page = .activity },
+                    remoteHost: accounts.isRemote ? server.host : nil,
+                    notice: server.notice,
+                    onServer: { router.page = .server }
                 )
             }
+        case .server:
+            ServerPanel(server: server, onBack: { router.page = .usage })
         case .addAccount:
             AddAccountPanel(linker: linker, accounts: accounts, onBack: { router.page = .usage })
         case .activity:
@@ -67,6 +81,10 @@ struct UsagePanel: View {
     let onAddAccount: () -> Void
     let onUnlink: (Account) -> Void
     var onActivity: () -> Void = {}
+    /// Set while usage comes from a quota-server: accounts are linked there, not here.
+    var remoteHost: String? = nil
+    var notice: String? = nil
+    var onServer: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -75,11 +93,15 @@ struct UsagePanel: View {
                 .padding(.top, 14)
                 .padding(.bottom, 12)
             VStack(spacing: 8) {
-                if accounts.isEmpty {
+                if let notice {
+                    IssueLine(icon: "exclamationmark.triangle.fill", tint: .orange, text: notice)
+                        .padding(.horizontal, 6)
+                }
+                if accounts.isEmpty && (remoteHost == nil || lastRefresh != nil) {
                     emptyState
                 }
                 ForEach(accounts) { account in
-                    AccountCard(account: account, entry: entries[account.id], now: now, displayMode: settings.displayMode, onUnlink: onUnlink)
+                    AccountCard(account: account, entry: entries[account.id], now: now, displayMode: settings.displayMode, remoteHost: remoteHost, onUnlink: onUnlink)
                 }
                 if let error = settings.loginItemError {
                     IssueLine(icon: "exclamationmark.triangle.fill", tint: .orange, text: error)
@@ -87,7 +109,16 @@ struct UsagePanel: View {
                 }
             }
             .padding(.horizontal, 10)
-            if !accounts.isEmpty {
+            if let remoteHost {
+                Button(action: onServer) {
+                    Label(String(localized: "Linked on \(remoteHost)"), systemImage: "server.rack")
+                        .font(.system(size: 12))
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+            } else if !accounts.isEmpty {
                 Button(action: onAddAccount) {
                     Label("Add account", systemImage: "plus")
                         .font(.system(size: 12))
@@ -133,11 +164,23 @@ struct UsagePanel: View {
             .foregroundStyle(.secondary)
             .disabled(isRefreshing || accounts.isEmpty)
             .help("Refresh now")
-            SettingsMenu(settings: settings, onAddAccount: onAddAccount)
+            SettingsMenu(settings: settings, isRemote: remoteHost != nil, onAddAccount: onAddAccount, onServer: onServer)
         }
     }
 
+    @ViewBuilder
     private var emptyState: some View {
+        if remoteHost != nil {
+            IssueLine(icon: "server.rack", tint: .secondary, text: String(localized: "No accounts are linked on the server. Run `quota-server link <service>` on your Mac."))
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(12)
+                .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.05)))
+        } else {
+            localEmptyState
+        }
+    }
+
+    private var localEmptyState: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("No linked accounts")
                 .font(.system(size: 13, weight: .semibold))
@@ -164,7 +207,9 @@ struct UsagePanel: View {
 
 private struct SettingsMenu: View {
     @ObservedObject var settings: AppSettings
+    let isRemote: Bool
     let onAddAccount: () -> Void
+    let onServer: () -> Void
 
     @Environment(\.isStaticPreview) private var isStaticPreview
 
@@ -185,7 +230,10 @@ private struct SettingsMenu: View {
             }
             .pickerStyle(.inline)
             Divider()
-            Button("Add account…", action: onAddAccount)
+            if !isRemote {
+                Button("Add account…", action: onAddAccount)
+            }
+            Button("Quota server…", action: onServer)
             Toggle("Launch at login", isOn: Binding(
                 get: { settings.launchAtLogin },
                 set: { settings.setLaunchAtLogin($0) }
@@ -209,6 +257,7 @@ private struct AccountCard: View {
     let entry: UsageStore.Entry?
     let now: Date
     let displayMode: AppSettings.DisplayMode
+    let remoteHost: String?
     let onUnlink: (Account) -> Void
     @Environment(\.isStaticPreview) private var isStaticPreview
 
@@ -238,9 +287,13 @@ private struct AccountCard: View {
                         .foregroundStyle(.secondary)
                 } else {
                     Menu {
-                        Text(account.source == .cli ? String(localized: "Uses the \(account.provider.cliName) login") : String(localized: "Linked by Quota"))
-                        Divider()
-                        Button("Unlink account", role: .destructive) { onUnlink(account) }
+                        if let remoteHost {
+                            Text(String(localized: "Linked on \(remoteHost)"))
+                        } else {
+                            Text(account.source == .cli ? String(localized: "Uses the \(account.provider.cliName) login") : String(localized: "Linked by Quota"))
+                            Divider()
+                            Button("Unlink account", role: .destructive) { onUnlink(account) }
+                        }
                     } label: {
                         Image(systemName: "ellipsis")
                             .frame(width: 16, height: 16)
@@ -285,6 +338,100 @@ private struct AccountCard: View {
             return IssueLine(icon: "key.fill", tint: .orange, text: text)
         default:
             return IssueLine(icon: "exclamationmark.triangle.fill", tint: .orange, text: text)
+        }
+    }
+}
+
+struct ServerPanel: View {
+    @ObservedObject var server: ServerLink
+    let onBack: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 6) {
+                Button(action: onBack) {
+                    Image(systemName: "chevron.left")
+                        .frame(width: 22, height: 22)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .foregroundStyle(.secondary)
+                .help("Back")
+                Text("Quota server")
+                    .font(.system(size: 13, weight: .semibold))
+                Spacer()
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, 12)
+            .padding(.bottom, 10)
+            VStack(alignment: .leading, spacing: 10) {
+                if let url = server.serverURL {
+                    connected(url)
+                } else {
+                    pairingForm
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(12)
+            .background(RoundedRectangle(cornerRadius: 10, style: .continuous).fill(Color.primary.opacity(0.05)))
+            .padding(.horizontal, 10)
+            Text("While connected, this Mac shows the accounts linked on the server and stops reading its own logins.")
+                .font(.system(size: 11))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 16)
+                .padding(.top, 10)
+                .padding(.bottom, 14)
+        }
+        .frame(width: 320)
+    }
+
+    private func connected(_ url: URL) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Connected to")
+                    .font(.system(size: 11))
+                    .foregroundStyle(.secondary)
+                Text(verbatim: url.host ?? url.absoluteString)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+            Button("Disconnect", role: .destructive, action: server.disconnect)
+                .controlSize(.small)
+        }
+    }
+
+    private var pairingForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("On the Mac that runs quota-server, run `quota-server pair` and enter the code here.")
+                .font(.system(size: 12))
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+            TextField(text: $server.address, prompt: Text(verbatim: "https://quota.example.com")) {
+                Text("Server")
+            }
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            TextField(text: $server.code, prompt: Text(verbatim: "12345678")) {
+                Text("Pairing code")
+            }
+            .textFieldStyle(.roundedBorder)
+            .controlSize(.small)
+            .monospacedDigit()
+            .onSubmit(server.pair)
+            HStack(spacing: 8) {
+                Button("Pair", action: server.pair)
+                    .buttonStyle(.borderedProminent)
+                    .controlSize(.small)
+                    .disabled(!server.canPair)
+                if server.isPairing {
+                    ProgressView().controlSize(.small).scaleEffect(0.6).frame(width: 14, height: 14)
+                }
+            }
+            if let error = server.error {
+                IssueLine(icon: "exclamationmark.triangle.fill", tint: .orange, text: error)
+            }
         }
     }
 }
