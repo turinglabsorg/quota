@@ -118,7 +118,7 @@ private func request(_ method: String, _ path: String, headers: [String: String]
         #expect(!String(decoding: usage.body, as: UTF8.self).contains(token))
     }
 
-    @Test func omitsMuseCodeSoOlderPhonesCanDecode() async throws {
+    @Test func publishesMuseCode() async throws {
         let claude = account
         let muse = Account(provider: .musecode, source: .cli, email: "muse@example.com", plan: "High Usage")
         let cache = UsageCache(loadAccounts: { [claude, muse] }, fetch: { account in
@@ -127,9 +127,22 @@ private func request(_ method: String, _ path: String, headers: [String: String]
             ])
         })
         await cache.refresh()
-        let payload = await cache.payload()
-        #expect(payload.accounts.map(\.provider) == [.claude])
-        let decoded = try UsagePayload.decode(UsagePayload.encode(payload))
+        let decoded = try UsagePayload.decode(UsagePayload.encode(await cache.payload()))
+        #expect(decoded.accounts.map(\.provider) == [.claude, .musecode])
+    }
+
+    @Test func skipsAccountsOfUnknownProviders() throws {
+        let payload = UsagePayload(generatedAt: Date(timeIntervalSince1970: 1_800_000_000), refreshedAt: nil, accounts: [
+            AccountUsage(account: account, snapshot: nil, issue: nil),
+        ])
+        var json = try JSONSerialization.jsonObject(with: UsagePayload.encode(payload)) as! [String: Any]
+        var accounts = json["accounts"] as! [[String: Any]]
+        var future = accounts[0]
+        future["provider"] = "someday"
+        future["id"] = UUID().uuidString
+        accounts.append(future)
+        json["accounts"] = accounts
+        let decoded = try UsagePayload.decode(JSONSerialization.data(withJSONObject: json))
         #expect(decoded.accounts.map(\.provider) == [.claude])
     }
 }

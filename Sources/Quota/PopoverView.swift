@@ -56,6 +56,7 @@ struct PopoverView: View {
                     onUnlink: linker.unlink,
                     onActivity: { router.activity.load(accounts: accounts.accounts); router.page = .activity },
                     remoteHost: accounts.isRemote ? server.host : nil,
+                    linkedHere: Set(accounts.fetchedHere.map(\.id)),
                     notice: server.notice,
                     onServer: { router.page = .server }
                 )
@@ -83,6 +84,8 @@ struct UsagePanel: View {
     var onActivity: () -> Void = {}
     /// Set while usage comes from a quota-server: accounts are linked there, not here.
     var remoteHost: String? = nil
+    /// Accounts this Mac fetches itself while paired (providers the server leaves out).
+    var linkedHere: Set<UUID> = []
     var notice: String? = nil
     var onServer: () -> Void = {}
 
@@ -101,7 +104,7 @@ struct UsagePanel: View {
                     emptyState
                 }
                 ForEach(accounts) { account in
-                    AccountCard(account: account, entry: entries[account.id], now: now, displayMode: settings.displayMode, remoteHost: remoteHost, onUnlink: onUnlink)
+                    AccountCard(account: account, entry: entries[account.id], now: now, displayMode: settings.displayMode, remoteHost: linkedHere.contains(account.id) ? nil : remoteHost, onUnlink: onUnlink)
                 }
                 if let error = settings.loginItemError {
                     IssueLine(icon: "exclamationmark.triangle.fill", tint: .orange, text: error)

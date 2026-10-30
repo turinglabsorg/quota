@@ -16,6 +16,10 @@ enum CLIReport {
                 }
             }
         }
+        await printFetched(accounts)
+    }
+
+    private static func printFetched(_ accounts: [Account]) async {
         let now = Date()
         for account in accounts {
             let title = [account.provider.displayName, account.email, account.sourceLabel].compactMap { $0 }.joined(separator: " · ")
@@ -48,7 +52,9 @@ enum CLIReport {
         let now = Date()
         let updated = payload.refreshedAt.map { Formatting.relative($0, from: now) } ?? "-"
         print("Quota server \(server.host ?? server.absoluteString), updated \(updated)\n")
-        for usage in payload.accounts {
+        let here = AccountStore.readHere(from: AccountStorage.load())
+        let shown = Set(AccountStore.shownRemote(payload.accounts.map(\.account), here: here).map(\.id))
+        for usage in payload.accounts where shown.contains(usage.id) {
             let account = usage.account
             let title = [account.provider.displayName, account.email, account.sourceLabel].compactMap { $0 }.joined(separator: " · ")
             print(account.plan.map { "\(title) (\($0))" } ?? title)
@@ -57,6 +63,7 @@ enum CLIReport {
             }
             if let issue = usage.issue { print("  \(issue.message)") }
         }
+        await printFetched(here)
     }
 
     /// `--pair <address> <code>`: pairs this Mac with a quota-server, like the Quota server page.

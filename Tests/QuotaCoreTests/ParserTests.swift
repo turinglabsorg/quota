@@ -576,6 +576,21 @@ struct OllamaCloudLiveTests {
 }
 
 @Suite struct MuseCodeParserTests {
+    @Test func readsTheTokenTheCLIStoredInItsAuthFile() {
+        let stored = json("""
+        {"schema_version": 1, "providers": {"meta": {"mechanism": "oauth", "access_token": "file-token", "user_email": "name@example.com"}}}
+        """)
+        #expect(MuseCodeParser.fileAccessToken(from: stored) == "file-token")
+        let keychainOnly = json("""
+        {"schema_version": 1, "providers": {"meta": {"mechanism": "oauth", "user_email": "name@example.com"}}}
+        """)
+        #expect(MuseCodeParser.fileAccessToken(from: keychainOnly) == nil)
+        let apiKey = json("""
+        {"providers": {"meta": {"mechanism": "api_key", "access_token": "x"}}}
+        """)
+        #expect(MuseCodeParser.fileAccessToken(from: apiKey) == nil)
+    }
+
     @Test func mapsTheAccountsPageWindows() throws {
         let snapshot = try MuseCodeParser.snapshot(from: json("""
         {

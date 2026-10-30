@@ -65,8 +65,11 @@ final class UsageStore: ObservableObject {
 
     func refreshIfStale() {
         if server.isConnected {
-            if let lastServerFetch, Date().timeIntervalSince(lastServerFetch) < serverStaleness { return }
-            refresh()
+            if let lastServerFetch, Date().timeIntervalSince(lastServerFetch) < serverStaleness {
+                wakeMuseIfIdle()
+                return
+            }
+            refresh(wakeIdleMuse: true)
             return
         }
         if let lastRefresh, Date().timeIntervalSince(lastRefresh) < refreshInterval {
@@ -81,8 +84,8 @@ final class UsageStore: ObservableObject {
     }
 
     private func wakeMuseIfIdle() {
-        guard !server.isConnected, !isRefreshing, !isWakingMuse,
-              let account = accounts.accounts.first(where: { $0.provider == .musecode }),
+        guard !isRefreshing, !isWakingMuse,
+              let account = accounts.fetchedHere.first(where: { $0.provider == .musecode }),
               !(entries[account.id]?.snapshot?.windows.contains(where: { $0.kind == .session && ($0.resetsAt.map { $0 > Date() } ?? false) }) ?? false)
         else { return }
         isWakingMuse = true
@@ -100,37 +103,45 @@ final class UsageStore: ObservableObject {
             return
         }
         if server.isConnected {
-            refreshFromServer()
+            refreshFromServer(wakeIdleMuse: wakeIdleMuse)
             return
         }
-        let current = accounts.accounts
+        let current = accounts.fetchedHere
         let ids = Set(current.map(\.id))
         entries = entries.filter { ids.contains($0.key) }
         isRefreshing = true
         Task {
-            await withTaskGroup(of: (Account, Result<ProviderSnapshot, ProviderIssue>).self) { group in
-                for account in current {
-                    group.addTask {
-                        do {
-                            return (account, .success(try await UsageFetchers.fetch(account, wakeIdleMuse: wakeIdleMuse)))
-                        } catch let issue as ProviderIssue {
-                            return (account, .failure(issue))
-                        } catch {
-                            return (account, .failure(.network))
-                        }
+            await fetchHere(current, wakeIdleMuse: wakeIdleMuse)
+            lastRefresh = Date()
+            finishRefresh()
+        }
+    }
+
+    private func fetchHere(_ current: [Account], wakeIdleMuse: Bool) async {
+        await withTaskGroup(of: (Account, Result<ProviderSnapshot, ProviderIssue>).self) { group in
+            for account in current {
+                group.addTask {
+                    do {
+                        return (account, .success(try await UsageFetchers.fetch(account, wakeIdleMuse: wakeIdleMuse)))
+                    } catch let issue as ProviderIssue {
+                        return (account, .failure(issue))
+                    } catch {
+                        return (account, .failure(.network))
                     }
                 }
-                for await (account, result) in group {
-                    apply(result, to: account)
-                }
             }
-            lastRefresh = Date()
-            isRefreshing = false
-            scheduleRefreshAfterNextReset()
-            if needsAnotherRefresh {
-                needsAnotherRefresh = false
-                refresh()
+            for await (account, result) in group {
+                apply(result, to: account)
             }
+        }
+    }
+
+    private func finishRefresh() {
+        isRefreshing = false
+        scheduleRefreshAfterNextReset()
+        if needsAnotherRefresh {
+            needsAnotherRefresh = false
+            refresh()
         }
     }
 
@@ -146,9 +157,12 @@ final class UsageStore: ObservableObject {
         refresh()
     }
 
-    private func refreshFromServer() {
+    /// Reads the server's accounts and, alongside, fetches the accounts the server leaves out (Muse Code).
+    private func refreshFromServer(wakeIdleMuse: Bool) {
         isRefreshing = true
+        let here = accounts.fetchedHere
         Task {
+            async let local: Void = fetchHere(here, wakeIdleMuse: wakeIdleMuse)
             do {
                 apply(try await ServerConnection.fetchUsage())
             } catch ServerConnection.Failure.unauthorized {
@@ -157,15 +171,13 @@ final class UsageStore: ObservableObject {
                 server.disconnect()
             } catch {
                 let issue = ProviderIssue.usageUnavailable((error as? ServerConnection.Failure ?? .network).message)
-                entries = entries.mapValues { Entry(snapshot: $0.snapshot, issue: issue) }
+                entries = Dictionary(uniqueKeysWithValues: entries.map { id, entry in
+                    (id, accounts.isFetchedHere(id) ? entry : Entry(snapshot: entry.snapshot, issue: issue))
+                })
             }
+            await local
             lastServerFetch = Date()
-            isRefreshing = false
-            scheduleRefreshAfterNextReset()
-            if needsAnotherRefresh {
-                needsAnotherRefresh = false
-                refresh()
-            }
+            finishRefresh()
         }
     }
 
@@ -173,14 +185,15 @@ final class UsageStore: ObservableObject {
     private func apply(_ payload: UsagePayload) {
         guard server.isConnected else { return }
         accounts.showRemote(payload.accounts.map(\.account))
+        let here = entries.filter { accounts.isFetchedHere($0.key) }
         entries = Dictionary(payload.accounts.map { account in
             (account.id, Entry(snapshot: account.snapshot, issue: account.issue?.providerIssue))
-        }, uniquingKeysWith: { first, _ in first })
+        }, uniquingKeysWith: { first, _ in first }).merging(here, uniquingKeysWith: { _, local in local })
         lastRefresh = payload.refreshedAt ?? payload.generatedAt
     }
 
     private func apply(_ result: Result<ProviderSnapshot, ProviderIssue>, to account: Account) {
-        guard !accounts.isRemote, accounts.accounts.contains(where: { $0.id == account.id }) else { return }
+        guard accounts.isFetchedHere(account.id) else { return }
         switch result {
         case .success(let snapshot):
             var shown = snapshot

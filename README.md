@@ -103,7 +103,7 @@ quota-server pair                             # prints a single-use code, valid 
 
 Install the iOS app from [Quota iOS](https://github.com/turinglabsorg/quota-ios), open it, enter your server address and the code. `quota-server devices` and `quota-server revoke <id>` manage paired devices.
 
-Another Mac can read the same server instead of its own logins: open Quota, choose **Quota server…** in the settings menu, enter the address and a new code (or run `Quota --pair <address> <code>`). While connected, Quota shows the server's accounts and makes no provider requests of its own; **Disconnect** (or `Quota --unpair`) goes back to the accounts linked on that Mac.
+Another Mac can read the same server instead of its own logins: open Quota, choose **Quota server…** in the settings menu, enter the address and a new code (or run `Quota --pair <address> <code>`). While connected, Quota shows the server's accounts and makes no provider requests of its own, except for a Muse Code account linked on that Mac, which Quota keeps reading locally (with today's tokens and the idle wake) in place of the server's; **Disconnect** (or `Quota --unpair`) goes back to the accounts linked on that Mac.
 
 ## Development
 

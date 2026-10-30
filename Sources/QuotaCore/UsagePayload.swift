@@ -17,6 +17,27 @@ public struct UsagePayload: Codable, Equatable, Sendable {
         self.accounts = accounts
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case version, generatedAt, refreshedAt, accounts
+    }
+
+    /// Accounts of a provider this client does not know (a newer server) are skipped, not fatal.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        version = try container.decode(Int.self, forKey: .version)
+        generatedAt = try container.decode(Date.self, forKey: .generatedAt)
+        refreshedAt = try container.decodeIfPresent(Date.self, forKey: .refreshedAt)
+        accounts = try container.decode([Skippable<AccountUsage>].self, forKey: .accounts).compactMap(\.value)
+    }
+
+    private struct Skippable<Value: Decodable>: Decodable {
+        let value: Value?
+
+        init(from decoder: Decoder) throws {
+            value = try? Value(from: decoder)
+        }
+    }
+
     public static func encode(_ payload: UsagePayload) throws -> Data {
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601

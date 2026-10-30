@@ -2,7 +2,8 @@ import Foundation
 
 // Muse Code reports the same two bars as accountscenter.meta.com on the key mint the CLI already
 // performs: POST https://api.meta.ai/muse-code/key with the Meta account token from the Keychain
-// item `ai.meta.dev.credentials` / `meta`. The call is idempotent (the same API key comes back) and
+// item `ai.meta.dev.credentials` / `meta`, or from the CLI's auth.json when it stores the login there
+// (a Mac whose login Keychain is not writable, such as one signed in over SSH). The call is idempotent (the same API key comes back) and
 // `subs_usage` is the current 5-hour window plus the weekly window. Quota does not store that key.
 // Session logs under ~/.local/share/muse only have token totals, not these percentages.
 enum MuseCodeLogin {
@@ -11,14 +12,25 @@ enum MuseCodeLogin {
     static let keyURL = URL(string: "https://api.meta.ai/muse-code/key")!
 
     static func accessToken() async -> String? {
-        guard let data = await Keychain.read(service: service, account: account) else { return nil }
-        return MuseCodeParser.accessToken(from: data)
+        if let data = await Keychain.read(service: service, account: account),
+           let token = MuseCodeParser.accessToken(from: data) {
+            return token
+        }
+        return (try? Data(contentsOf: authFile())).flatMap(MuseCodeParser.fileAccessToken(from:))
     }
 
-    /// Email recorded by `muse login` in ~/.config/muse/auth.json. The file holds no tokens.
+    /// The CLI's auth.json, resolved like the `muse` launcher: `MUSE_AUTH_PATH`, then `XDG_CONFIG_HOME`.
+    /// It always records the email; it holds the token only when the CLI could not use the Keychain.
+    static func authFile(environment: [String: String] = ProcessInfo.processInfo.environment) -> URL {
+        if let path = environment["MUSE_AUTH_PATH"], !path.isEmpty { return URL(fileURLWithPath: path) }
+        if let config = environment["XDG_CONFIG_HOME"], !config.isEmpty {
+            return URL(fileURLWithPath: config).appendingPathComponent("muse/auth.json")
+        }
+        return LocalFiles.home.appendingPathComponent(".config/muse/auth.json")
+    }
+
     static func profileEmail() -> String? {
-        let url = LocalFiles.home.appendingPathComponent(".config/muse/auth.json")
-        guard let data = try? Data(contentsOf: url),
+        guard let data = try? Data(contentsOf: authFile()),
               let root = try? JSON.object(data),
               let providers = JSON.dict(root["providers"]),
               let meta = JSON.dict(providers["meta"])
@@ -31,6 +43,17 @@ public enum MuseCodeParser {
     public static func accessToken(from data: Data) -> String? {
         guard let root = try? JSON.object(data) else { return nil }
         return JSON.string(root["access_token"])
+    }
+
+    /// The OAuth token in the CLI's auth.json (`providers.meta`), when the CLI stored it there.
+    public static func fileAccessToken(from data: Data) -> String? {
+        guard let root = try? JSON.object(data),
+              let providers = JSON.dict(root["providers"]),
+              let meta = JSON.dict(providers["meta"]),
+              JSON.string(meta["mechanism"]) == "oauth",
+              let token = JSON.string(meta["access_token"]), !token.isEmpty
+        else { return nil }
+        return token
     }
 
     /// `subs_tier_name` is "Muse Code High Usage"; the badge shows "High Usage" next to the provider name.

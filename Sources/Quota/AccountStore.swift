@@ -3,11 +3,32 @@ import QuotaCore
 
 @MainActor
 final class AccountStore: ObservableObject {
-    /// The accounts on screen: the ones linked on this Mac, or the server's while one is connected.
+    /// The accounts on screen: the ones linked on this Mac, or the server's while one is connected,
+    /// with the accounts of `readHere` providers linked on this Mac in place of the server's.
     @Published private(set) var accounts: [Account]
     @Published private(set) var isRemote = false
+    private var remote: [Account] = []
     private var local: [Account] {
-        didSet { if !isRemote { accounts = local } }
+        didSet { if isRemote { showRemote(remote) } else { accounts = local } }
+    }
+
+    /// Providers a paired Mac still reads itself when linked here: Muse Code's idle wake on open and its
+    /// token rows from the local session logs are not part of the server payload.
+    nonisolated static let readHere: Set<Provider> = [.musecode]
+
+    /// The accounts this Mac fetches itself.
+    var fetchedHere: [Account] {
+        isRemote ? Self.readHere(from: local) : local
+    }
+
+    nonisolated static func readHere(from accounts: [Account]) -> [Account] {
+        accounts.filter { readHere.contains($0.provider) }
+    }
+
+    /// The server's accounts, without the providers this Mac reads itself.
+    nonisolated static func shownRemote(_ remote: [Account], here: [Account]) -> [Account] {
+        let providers = Set(here.map(\.provider))
+        return remote.filter { !providers.contains($0.provider) }
     }
 
     init(accounts: [Account] = AccountStorage.load()) {
@@ -21,7 +42,13 @@ final class AccountStore: ObservableObject {
 
     func showRemote(_ remote: [Account]) {
         isRemote = true
-        if accounts != remote { accounts = remote }
+        self.remote = remote
+        let shown = Self.sorted(Self.shownRemote(remote, here: fetchedHere) + fetchedHere)
+        if accounts != shown { accounts = shown }
+    }
+
+    func isFetchedHere(_ id: UUID) -> Bool {
+        fetchedHere.contains { $0.id == id }
     }
 
     func showLocal() {
@@ -30,15 +57,19 @@ final class AccountStore: ObservableObject {
     }
 
     func add(_ account: Account) {
+        local = Self.sorted(local + [account])
+        AccountStorage.save(local)
+    }
+
+    private static func sorted(_ accounts: [Account]) -> [Account] {
         let order = Provider.allCases
-        local = (local + [account]).enumerated()
+        return accounts.enumerated()
             .sorted { lhs, rhs in
                 let left = order.firstIndex(of: lhs.element.provider) ?? 0
                 let right = order.firstIndex(of: rhs.element.provider) ?? 0
                 return left == right ? lhs.offset < rhs.offset : left < right
             }
             .map(\.element)
-        AccountStorage.save(local)
     }
 
     func remove(_ id: UUID) {
