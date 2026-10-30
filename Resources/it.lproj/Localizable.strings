@@ -148,3 +148,4 @@
 "On the Mac that runs quota-server, run `quota-server pair` and enter the code here." = "Sul Mac che esegue quota-server, esegui `quota-server pair` e inserisci qui il codice.";
 "While connected, this Mac shows the accounts linked on the server and stops reading its own logins." = "Finché è collegato, questo Mac mostra gli account collegati sul server e smette di leggere i propri login.";
 "Linked on %@" = "Collegato su %@";
+"How much of your Claude, Codex, Grok, Ollama Cloud and Muse Code limits you have left." = "Quanto ti resta dei limiti di Claude, Codex, Grok, Ollama Cloud e Muse Code.";
