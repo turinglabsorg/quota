@@ -91,9 +91,11 @@ On the always-on Mac (macOS 12.3 or later, Intel or Apple silicon):
 ```bash
 scripts/build-server.sh                       # on your development Mac: build/server/quota-server
 quota-server detect                           # CLI logins found on this Mac
-quota-server link claude                      # link the logins you want (claude, codex, grok, ollama)
+quota-server link claude                      # link the logins you want (claude, codex, grok, ollama, musecode)
 quota-server serve --port 4310                # listens on localhost only
 ```
+
+For Muse Code, run `muse login` on that Mac. Over SSH the login Keychain is not writable, so the CLI keeps the login in `~/.config/muse/auth.json`; Quota reads it from there.
 
 Put it behind any HTTPS reverse proxy you already use (Caddy, Tailscale Serve, a tunnel), then pair the phone:
 
