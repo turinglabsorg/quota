@@ -8,7 +8,7 @@ Native macOS menu bar app (Swift, AppKit + SwiftUI, SwiftPM) that shows remainin
 - `Sources/Quota`: the app (status item, popover, account store, link controller, CLI report, preview renderer).
 - `Sources/QuotaServer`: `quota-server`, a headless server that publishes the usage of the accounts linked on an always-on Mac for the iOS app (HTTP server on Network.framework, usage cache, paired devices, CLI commands).
 - The iOS app and its widgets live in Quota iOS (github.com/turinglabsorg/quota-ios), which includes this repository as a git submodule and compiles `QuotaCore/{Models,Formatting,JSON,UsagePayload}.swift`, `Quota/ProviderGlyph.swift` and `Resources/*.lproj` from it. Changes to those files reach the iOS app when quota-ios bumps the submodule.
-- `Tests/QuotaCoreTests`, `Tests/QuotaServerTests`: Swift Testing suites.
+- `Tests/QuotaCoreTests`, `Tests/QuotaServerTests`, `Tests/QuotaTests`: Swift Testing suites. `QuotaTests` covers app state recovery with injected server reads.
 - `DESIGN.md`: design system. Read it before any UI change and update it when you add patterns.
 
 ## Commands
@@ -38,6 +38,7 @@ With the macOS 27 SDK, SwiftUI `@State` is a macro whose plugin is missing from 
 - Accounts are the same `AccountStorage` suite as the app: link them on the server Mac with `quota-server detect`, `link <service>`, `signin ollama`, `unlink <id>`.
 - The Mac app can be a client too (`ServerConnection` in QuotaCore, `ServerLink` in the app): the "Quota server" page pairs it with `POST /v1/pair`, the address goes in the shared defaults (`serverURL`), the device token in the Keychain item `com.turinglabs.quota.server` (via `/usr/bin/security`), and the last payload in `~/Library/Application Support/Quota/RemoteUsage/usage.json` (mode 600, usage only). While paired, `AccountStore.showRemote` replaces the local accounts on screen (they stay stored), `UsageStore` reads `GET /v1/usage` every 5 minutes (and on popover open when older than a minute) and makes no provider requests for them, and linking is hidden. Exception: a Muse Code account linked on this Mac (`AccountStore.readHere`) replaces the server's Muse accounts on screen and is still fetched locally (`AccountStore.fetchedHere`), because its idle wake on open and its token rows are not in the payload; it keeps its Unlink action, and `--print` lists it after the server's accounts. 401 unpairs and returns to the local accounts. Server issues map back through `IssueUsage.providerIssue`.
 - The iOS app (quota-ios) keeps the device token in the Keychain and the last payload in its App Group; the widgets fetch the server themselves every 15 minutes. Keep the API backward compatible: phones may run an older app.
+- A failed server-token read from the Keychain (including during macOS dark wake), an empty token or invalid UTF-8 reports `ServerConnection.Failure.keychainUnavailable`. The Mac keeps its pairing, remote accounts and cached usage, then retries on the next refresh instead of deleting the pairing and falling back to local provider logins.
 
 ## Accounts
 
