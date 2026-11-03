@@ -15,6 +15,7 @@ final class UsageStore: ObservableObject {
 
     private let accounts: AccountStore
     private let server: ServerLink
+    private let fetchRemote: () async throws -> UsagePayload
     private let refreshInterval: TimeInterval = 5 * 60
     private let serverStaleness: TimeInterval = 60
     private var lastServerFetch: Date?
@@ -24,10 +25,11 @@ final class UsageStore: ObservableObject {
     private var isWakingMuse = false
     private var cancellables = Set<AnyCancellable>()
 
-    init(accounts: AccountStore, server: ServerLink, entries: [UUID: Entry] = [:]) {
+    init(accounts: AccountStore, server: ServerLink, entries: [UUID: Entry] = [:], fetchRemote: @escaping () async throws -> UsagePayload = ServerConnection.fetchUsage) {
         self.accounts = accounts
         self.server = server
         self.entries = entries
+        self.fetchRemote = fetchRemote
     }
 
     func start() {
@@ -164,11 +166,9 @@ final class UsageStore: ObservableObject {
         Task {
             async let local: Void = fetchHere(here, wakeIdleMuse: wakeIdleMuse)
             do {
-                apply(try await ServerConnection.fetchUsage())
+                apply(try await fetchRemote())
             } catch ServerConnection.Failure.unauthorized {
                 server.revoked()
-            } catch ServerConnection.Failure.notPaired {
-                server.disconnect()
             } catch {
                 let issue = ProviderIssue.usageUnavailable((error as? ServerConnection.Failure ?? .network).message)
                 entries = Dictionary(uniqueKeysWithValues: entries.map { id, entry in

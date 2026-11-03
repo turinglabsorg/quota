@@ -13,6 +13,7 @@ public enum ServerConnection {
         case network
         case invalidResponse
         case keychain
+        case keychainUnavailable
 
         public var message: String {
             switch self {
@@ -25,6 +26,7 @@ public enum ServerConnection {
             case .network: String(localized: "Can't reach the Quota server.")
             case .invalidResponse: String(localized: "Unrecognized response.")
             case .keychain: String(localized: "Couldn't save the pairing on this device.")
+            case .keychainUnavailable: String(localized: "Can't read the server pairing from Keychain. Quota will try again.")
             }
         }
     }
@@ -63,9 +65,7 @@ public enum ServerConnection {
 
     public static func fetchUsage() async throws -> UsagePayload {
         guard let server = serverURL else { throw Failure.notPaired }
-        guard let data = await Keychain.read(service: tokenService), let token = String(data: data, encoding: .utf8), !token.isEmpty else {
-            throw Failure.notPaired
-        }
+        let token = try await pairingToken { await Keychain.read(service: tokenService) }
         let payload = try await fetchUsage(server: server, token: token)
         if let data = try? UsagePayload.encode(payload) {
             try? FileManager.default.createDirectory(at: cacheURL.deletingLastPathComponent(), withIntermediateDirectories: true)
@@ -73,6 +73,13 @@ public enum ServerConnection {
             try? FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: cacheURL.path)
         }
         return payload
+    }
+
+    static func pairingToken(read: () async -> Data?) async throws -> String {
+        guard let data = await read(), let token = String(data: data, encoding: .utf8), !token.isEmpty else {
+            throw Failure.keychainUnavailable
+        }
+        return token
     }
 
     /// The last payload read from the server (usage only), shown at launch until the next fetch.

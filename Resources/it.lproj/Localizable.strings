@@ -141,6 +141,7 @@
 "Open Quota to pair" = "Apri Quota per abbinare";
 "How much of your Claude, Codex, Grok, Ollama Cloud and Muse Code limits you have left." = "Quanto ti resta dei limiti di Claude, Codex, Grok, Ollama Cloud e Muse Code.";
 "Couldn't save the pairing on this device." = "Impossibile salvare l'abbinamento su questo dispositivo.";
+"Can't read the server pairing from Keychain. Quota will try again." = "Impossibile leggere l'abbinamento al server dal Portachiavi. Quota riproverà.";
 "Quota server" = "Server Quota";
 "Quota server…" = "Server Quota…";
 "Connected to" = "Collegato a";

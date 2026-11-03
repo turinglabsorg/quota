@@ -10,6 +10,7 @@ let package = Package(
         .executableTarget(name: "QuotaServer", dependencies: ["QuotaCore"]),
         .testTarget(name: "QuotaCoreTests", dependencies: ["QuotaCore"]),
         .testTarget(name: "QuotaServerTests", dependencies: ["QuotaServer"]),
+        .testTarget(name: "QuotaTests", dependencies: ["Quota"]),
     ],
     swiftLanguageModes: [.v5]
 )

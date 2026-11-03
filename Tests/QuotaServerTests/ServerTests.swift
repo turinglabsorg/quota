@@ -148,6 +148,16 @@ private func request(_ method: String, _ path: String, headers: [String: String]
 }
 
 @Suite struct ServerConnectionTests {
+    @Test func distinguishesUnavailableKeychainFromUnpairedDevice() async throws {
+        for data in [nil, Data(), Data([0xff])] as [Data?] {
+            await #expect(throws: ServerConnection.Failure.keychainUnavailable) {
+                try await ServerConnection.pairingToken { data }
+            }
+        }
+        let token = try await ServerConnection.pairingToken { Data("test-device-token".utf8) }
+        #expect(token == "test-device-token")
+    }
+
     @Test func normalizesServerAddresses() {
         #expect(ServerConnection.address(from: " quota.example.com/ ")?.absoluteString == "https://quota.example.com")
         #expect(ServerConnection.address(from: "http://127.0.0.1:4310")?.absoluteString == "http://127.0.0.1:4310")
